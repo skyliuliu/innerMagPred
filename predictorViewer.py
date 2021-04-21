@@ -45,6 +45,9 @@ def plotLM(residual_memory, us):
     ax2.semilogy(us)
     plt.show()
 
+
+# plt.axis('auto')   # 坐标轴自动缩放
+
 def plotP(predictor, state, index, plotType):
     '''
     描绘UKF算法中误差协方差yz分量的变化过程
@@ -62,11 +65,11 @@ def plotP(predictor, state, index, plotType):
     pos, q = predictor.ukf.x[:3].copy(), predictor.ukf.x[3: 7]  # 获取预测值，浅拷贝坐标值
     em = q2R(q)[:, -1]
     if plotType == (0, 1):
+        plt.ylim(-0.2, 0.4)
         plt.axis('equal')  # 坐标轴按照等比例绘图
     elif plotType == (1, 2):
-        xtruth[1] += index
-        pos[1] += index
-        plt.axis('auto')   # 坐标轴自动缩放
+        xtruth[1] += index * 0.1
+        pos[1] += index * 0.1
     else:
         raise Exception("invalid plotType")
 
@@ -76,10 +79,8 @@ def plotP(predictor, state, index, plotType):
     plt.plot(xtruth[x], xtruth[y], 'ro')  # 画出真实值
     plt.text(xtruth[x], xtruth[y], int(index), fontsize=9)
 
-
-
     # 添加磁矩方向箭头
-    scale = 0.1
+    scale = 0.05
     plt.annotate(text='', xy=(pos[x] + em[x] * scale, pos[y] + em[y] * scale), xytext=(pos[x], pos[y]),
                  color="blue", weight="bold", arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color="b"))
     plt.annotate(text='', xy=(xtruth[x] + mtruth[x] * scale, xtruth[y] + mtruth[y] * scale),
@@ -142,12 +143,13 @@ def plotPos(state0, state, index, plotType):
     plt.gca().grid(b=True)
     plt.pause(0.05)
 
-def plotErr(x, y, z, titleName):
+def plotErr(x, y, z, contourBar, titleName):
     '''
     描绘误差分布的等高线图
     :param x: 【np.array】误差分布的x变量 (n, n)
     :param y: 【np.array】误差分布的y变量 (n, n)
     :param z: 【np.array】误差分布的结果 (n, n)
+    :param contourBar: 【np.array】等高线的刻度条
     :param titleName: 【string】图的标题名称
     :return:
     '''
@@ -155,7 +157,7 @@ def plotErr(x, y, z, titleName):
     plt.xlabel('x/m')
     plt.ylabel('y/m')
     plt.tick_params(labelsize=10)
-    plt.contourf(x, y, z, 8, cmap='jet')    # 填充等高线内区域
-    cntr = plt.contour(x, y, z, 8, colors='black', linewidths=0.5)    # 描绘等高线轮廓
+    plt.contourf(x, y, z, contourBar, cmap='jet')    # 填充等高线内区域
+    cntr = plt.contour(x, y, z, contourBar, colors='black', linewidths=0.5)    # 描绘等高线轮廓
     plt.clabel(cntr, inline_spacing=1, fmt='%.2f', fontsize=8)     # 标识等高线的数值
     plt.show()

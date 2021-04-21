@@ -41,7 +41,7 @@ def h(state):
     EPMNorm = np.linalg.norm(EPM)
     eEPM = EPM / EPMNorm
 
-    pos, q = state[0: 3], state[3:]
+    pos, q = state[0: 3], state[3: 7]
     R = q2R(q)
     emz = R[:, -1]     # 重力矢量在胶囊坐标系下的坐标
     d = np.dot(R.T, SENSORLOC * 0.5)  # 胶囊坐标系下的sensor位置矢量转换到EPM坐标系
@@ -239,6 +239,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
     :param states: 模拟的真实状态
     :param state0: 模拟的初始值
     :param sensor_std: sensor的噪声标准差[mG]
+    :param plotType: 【tuple】描绘位置的分量 'xy' or 'yz'
     :param plotBool: 【bool】是否绘图
     :param printBool: 【bool】是否打印输出
     :param maxIter: 【int】最大迭代次数
@@ -275,9 +276,10 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
         ems.clear()
         return (err_pos, err_em)
 
-def simErrDistributed(sensor_std=10, pos_or_ori=1):
+def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     '''
     模拟误差分布
+    :param contourBar: 【np.array】等高线的刻度条
     :param sensor_std: 【float】sensor的噪声标准差[mG]
     :param pos_or_ori: 【int】选择哪个输出 0：位置，1：姿态
     :return:
@@ -293,11 +295,11 @@ def simErrDistributed(sensor_std=10, pos_or_ori=1):
             state0[1] = y[i, j]
             z[i, j] = sim(states, state0, sensor_std, plotBool=False, plotType=(0, 1), printBool=False)[pos_or_ori]
 
-    plotErr(x, y, z, titleName='sensor_std={}'.format(sensor_std))
+    plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
 if __name__ == '__main__':
     # state0 = np.array([0.2, 0.2, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
     # states = [np.array([0, 0, -0.4, 0.5* math.sqrt(3), 0.5, 0, 0])]    # 真实值
     # err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(0, 1), printBool=True)
     # print(err)
-    simErrDistributed(sensor_std=100, pos_or_ori=0)
+    simErrDistributed(contourBar=np.linspace(0, 0.24, 7), sensor_std=100, pos_or_ori=0)
