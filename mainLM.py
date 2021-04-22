@@ -268,7 +268,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
 
         posTruth, emTruth = states[0][:3], states[0][3:]
         err_pos = np.linalg.norm(poss[-1] - posTruth) / np.linalg.norm(posTruth)
-        err_em = np.linalg.norm(ems[-1] - emTruth)   # 四元数本身是归一化的
+        err_em = np.linalg.norm(ems[-1] - emTruth)   # 方向矢量本身是归一化的
         print('err_pos={:.0%}, err_em={:.0%}'.format(err_pos, err_em))
         residual_memory.clear()
         us.clear()

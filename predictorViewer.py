@@ -6,6 +6,8 @@ Email: Nicke_liu@163.com
 DateTime: 2021/4/19 16:00
 desc: 定位结果的显示工具
 '''
+import copy
+
 import matplotlib.pyplot as plt
 import numpy as np
 from filterpy.stats import plot_covariance
@@ -157,7 +159,12 @@ def plotErr(x, y, z, contourBar, titleName):
     plt.xlabel('x/m')
     plt.ylabel('y/m')
     plt.tick_params(labelsize=10)
-    plt.contourf(x, y, z, contourBar, cmap='jet')    # 填充等高线内区域
+    plt_contourf = plt.contourf(x, y, z, contourBar, cmap='jet', extend='both')    # 填充等高线内区域
+    cmap = copy.copy(plt_contourf.get_cmap())
+    cmap.set_over('red')     # 超过contourBar的上限就填充为red
+    cmap.set_under('blue')     # 低于contourBar的下限就填充为blue
+    plt_contourf.changed()
+
     cntr = plt.contour(x, y, z, contourBar, colors='black', linewidths=0.5)    # 描绘等高线轮廓
-    plt.clabel(cntr, inline_spacing=1, fmt='%.2f', fontsize=8)     # 标识等高线的数值
+    plt.clabel(cntr, inline_spacing=1, fmt='%.2f', fontsize=8, colors='white')     # 标识等高线的数值
     plt.show()

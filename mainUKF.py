@@ -68,7 +68,7 @@ class InMagPredictor:
 
         self.ukf.Q = np.eye(self.stateNum) * 0.05 * self.dt  # 将速度作为过程噪声来源，Qi = [v*dt]
         Qqii, Qqij = 0.05, 0.005
-        self.ukf.Q[3: 7, 3: 7] = np.array([   # 精细化定义姿态四元数的过程误差
+        self.ukf.Q[3: 7, 3: 7] = np.array([   # 精细化定义姿态(四元数)的过程误差
             [Qqii, Qqij, Qqij, Qqij],
             [Qqij, Qqii, 0,     0],
             [Qqij, 0,    Qqii,  0],
@@ -168,7 +168,7 @@ class InMagPredictor:
             posTruth, emTruth = state[:3], q2R(state[3: 7])[:, -1]
             pos, em = self.ukf.x[:3], q2R(self.ukf.x[3: 7])[:, -1]
             err_pos = np.linalg.norm(pos - posTruth) / np.linalg.norm(posTruth)
-            err_em = np.linalg.norm(em - emTruth)     # 四元数本身是归一化的
+            err_em = np.linalg.norm(em - emTruth)     # 方向矢量本身是归一化的
         print('err_pos={:.0%}, err_em={:.0%}'.format(err_pos, err_em))
         return (err_pos, err_em)
 
@@ -181,7 +181,7 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     :return:
     """
     n = 20
-    x, y = np.meshgrid(np.linspace(0, 0.1, n), np.linspace(0, 0.1, n))
+    x, y = np.meshgrid(np.linspace(-0.1, 0.1, n), np.linspace(-0.1, 0.1, n))
     state0Dist = np.array([0, 0, -0.4, 1, 0, 0, 0, 0, 0, 0])
     statesDist = [np.array([0, 0, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0, 0, 0, 0])]
     z = np.zeros((n, n))
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     sensor_std = 10
     state0 = np.array([0.15, 0.15, -0.4, 1, 0, 0, 0, 0, 0, 0])  # 初始值
     states = [np.array([0, 0, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]  # 真实值
-    pr = InMagPredictor(sensor_std, state0, states[0])
-    err = pr.sim(states, plotType=(1, 2), sensor_std=sensor_std, printBool=True, plotBool=True)
+    # pr = InMagPredictor(sensor_std, state0, states[0])
+    # err = pr.sim(states, plotType=(1, 2), sensor_std=sensor_std, printBool=True, plotBool=True)
 
-    # simErrDistributed(contourBar=10 ,sensor_std=sensor_std, pos_or_ori=0)
+    simErrDistributed(contourBar=np.linspace(0, 0.1, 11) ,sensor_std=sensor_std, pos_or_ori=0)
