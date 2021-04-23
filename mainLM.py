@@ -264,11 +264,11 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
                 if j == iters - 1:
                     plt.ioff()
                     plt.show()
-                plotLM(residual_memory, us)
+            plotLM(residual_memory, us)
 
-        posTruth, emTruth = states[0][:3], states[0][3:]
+        posTruth, emTruth = states[0][:3], q2R(states[0][3: 7])[:, -1]
         err_pos = np.linalg.norm(poss[-1] - posTruth) / np.linalg.norm(posTruth)
-        err_em = np.linalg.norm(ems[-1] - emTruth)   # 方向矢量本身是归一化的
+        err_em = np.linalg.norm(q2R(ems[-1])[:, -1] - emTruth)   # 方向矢量本身是归一化的
         print('err_pos={:.0%}, err_em={:.0%}'.format(err_pos, err_em))
         residual_memory.clear()
         us.clear()
@@ -298,8 +298,8 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
 if __name__ == '__main__':
-    # state0 = np.array([0.2, 0.2, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
-    # states = [np.array([0, 0, -0.4, 0.5* math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    # err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(0, 1), printBool=True)
-    # print(err)
-    simErrDistributed(contourBar=np.linspace(0, 0.24, 7), sensor_std=100, pos_or_ori=0)
+    state0 = np.array([0.1, 0.1, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
+    states = [np.array([0, 0, -0.4, 1, 2, 0, 0])]    # 真实值
+    err = sim(states, state0, sensor_std=200, plotBool=True, plotType=(1, 2), printBool=True)
+    print(err)
+    # simErrDistributed(contourBar=np.linspace(0, 0.36, 7), sensor_std=300, pos_or_ori=1)

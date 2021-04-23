@@ -166,5 +166,5 @@ def plotErr(x, y, z, contourBar, titleName):
     plt_contourf.changed()
 
     cntr = plt.contour(x, y, z, contourBar, colors='black', linewidths=0.5)    # 描绘等高线轮廓
-    plt.clabel(cntr, inline_spacing=1, fmt='%.2f', fontsize=8, colors='white')     # 标识等高线的数值
+    plt.clabel(cntr, inline_spacing=1, fmt='%.2f', fontsize=8, colors='black')     # 标识等高线的数值
     plt.show()

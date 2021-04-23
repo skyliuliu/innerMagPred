@@ -99,10 +99,10 @@ class InMagPredictor:
 
     def run(self, z, printBool):
         pos = np.round(self.ukf.x[:3], 3)
-        self.em = q2R(self.ukf.x[3: 7])[:, -1]
+        em = q2R(self.ukf.x[3: 7])[:, -1]
         timeCost = (datetime.datetime.now() - self.t0).total_seconds()
         if printBool:
-            print(r'pos={}m, em={}, w={}, timeCost={:.3f}s'.format(pos, np.round(self.em, 3),
+            print(r'pos={}m, em={}, w={}, timeCost={:.3f}s'.format(pos, np.round(em, 3),
                                                                    np.round(self.ukf.x[-3:], 3), timeCost))
         self.t0 = datetime.datetime.now()
 
