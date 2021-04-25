@@ -12,7 +12,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-from predictorViewer import q2R, plotErr, plotLM, plotPos
+from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos
 
 
 tao = 1e-3
@@ -29,7 +29,7 @@ SLAVES = 2
 MOMENT = 2169
 DISTANCE = 0.02
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM = np.array([[0, 1, 0]]).T
+EPM = np.array([[0, 1, -1]]).T
 
 def h(state):
     '''
@@ -42,6 +42,7 @@ def h(state):
     eEPM = EPM / EPMNorm
 
     pos, q = state[0: 3], state[3: 7]
+    q /= np.linalg.norm(q)
     R = q2R(q)
     emz = R[:, -1]     # 重力矢量在胶囊坐标系下的坐标
     d = np.dot(R.T, SENSORLOC * 0.5)  # 胶囊坐标系下的sensor位置矢量转换到EPM坐标系
@@ -60,7 +61,9 @@ def h(state):
     B1s = np.dot(R, B1)
     B2s = np.dot(R, B2)
 
-    return np.vstack((B1s, B2s, emz.reshape(3, 1))).reshape(-1)
+    pitch, roll, yaw = q2Euler(q)
+
+    return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), [pitch, roll]))
 
 
 
@@ -105,7 +108,7 @@ def residual(state, output_data):
     :param 【np.array】output_data: 观测量 (m, )
     :return:【np.array】 residual (m, )
     """
-    data_est_output = h(state)
+    data_est_output = h(state[:7])
     residual = output_data - data_est_output
     return residual
 
@@ -207,7 +210,9 @@ def stateOut(state, state2, t0, i, mse, printStr, printBool):
     R = q2R(state[3:7])
     emx = np.round(R[:, 0], 3)
     emz = np.round(R[:, -1], 3)
-    print('i={}, pos={}m, emx={}, emz={}, timeCost={:.3f}s, mse={:.8e}'.format(i, pos, emx, emz, timeCost, mse))
+    euler = q2Euler(state[3: 7])
+    B = h(state)[:6]
+    print('i={}, pos={}m, q={}, emz={}, euler={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(euler, 3), np.round(B)))
 
 
 def generate_data(num_data, state, sensor_std, printBool):
@@ -219,21 +224,21 @@ def generate_data(num_data, state, sensor_std, printBool):
     :param printBool: 【bool】是否打印输出
     :return: 【np.array】模拟的B值 + 加速度计的数值, (num_data, )
     """
-    Bmid = h(state)[:-3]    # 模拟B值数据的中间值
-    Bsim = np.zeros(num_data - 3)
-    for j in range(num_data - 3):
-        Bsim[j] = np.random.normal(Bmid[j], sensor_std, 1)
+    mid = h(state)    # 模拟B值数据的中间值
+    sim = np.zeros(num_data)
+    for j in range(num_data - 2):
+        sim[j] = np.random.normal(mid[j], sensor_std, 1)
+    for k in range(num_data - 2, num_data):
+        sim[k] = np.random.normal(mid[k], 5, 1)
 
-    R = q2R(state[3:])
-    accSim = R[:, -1]
     if printBool:
-        print('Bmid={}'.format(np.round(Bmid, 0)))
-        print('Bmid={}'.format(np.round(Bmid, 0)))
-        print('truth: pos={}m, e_moment={}\n'.format(state[:3], np.round(accSim, 3)))
-    return np.concatenate((Bsim, accSim))
+        print('Bmid={}'.format(np.round(mid[:6], 0)))
+        print('Bsim={}'.format(np.round(sim[:6], 0)))
+        print('truth: pos={}m, pitch={}, roll={}\n'.format(state[:3], np.round(sim[-2], 2), np.round(sim[-1], 2)))
+    return sim
 
 
-def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
+def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
     '''
     使用模拟的观测值验证算法的准确性
     :param states: 模拟的真实状态
@@ -245,7 +250,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
     :param maxIter: 【int】最大迭代次数
     :return: 【tuple】 位置[x, y, z]和姿态四元数[q0, q1, q2, q3]的误差百分比
     '''
-    m, n = 9, 7
+    m, n = 8, 7
     for i in range(1):
         # run
         output_data = generate_data(m, states[i], sensor_std, printBool)
@@ -264,12 +269,12 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=50):
                 if j == iters - 1:
                     plt.ioff()
                     plt.show()
-            plotLM(residual_memory, us)
+            # plotLM(residual_memory, us)
 
         posTruth, emTruth = states[0][:3], q2R(states[0][3: 7])[:, -1]
         err_pos = np.linalg.norm(poss[-1] - posTruth) / np.linalg.norm(posTruth)
         err_em = np.linalg.norm(q2R(ems[-1])[:, -1] - emTruth)   # 方向矢量本身是归一化的
-        print('err_pos={:.0%}, err_em={:.0%}'.format(err_pos, err_em))
+        print('pos={}: err_pos={:.0%}, err_em={:.0%}'.format(np.round(posTruth, 3), err_pos, err_em))
         residual_memory.clear()
         us.clear()
         poss.clear()
@@ -291,15 +296,17 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     z = np.zeros((n, n))
     for i in range(n):
         for j in range(n):
-            state0[0] = x[i, j]
-            state0[1] = y[i, j]
+            # state0[0] = x[i, j]
+            # state0[1] = y[i, j]
+            states[0][0] = x[i, j]
+            states[0][1] = y[i, j]
             z[i, j] = sim(states, state0, sensor_std, plotBool=False, plotType=(0, 1), printBool=False)[pos_or_ori]
 
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
 if __name__ == '__main__':
-    state0 = np.array([0.1, 0.1, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
-    states = [np.array([0, 0, -0.4, 1, 2, 0, 0])]    # 真实值
-    err = sim(states, state0, sensor_std=200, plotBool=True, plotType=(1, 2), printBool=True)
-    print(err)
-    # simErrDistributed(contourBar=np.linspace(0, 0.36, 7), sensor_std=300, pos_or_ori=1)
+    state0 = np.array([-0.1, -0.1, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
+    states = [np.array([0.1, 0.1, -0.5, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
+    err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
+
+    # simErrDistributed(contourBar=np.linspace(0, 0.5, 9), sensor_std=10, pos_or_ori=0)
