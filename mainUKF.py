@@ -17,7 +17,7 @@ from filterpy.stats import plot_covariance
 
 from mahonyPredictor import MahonyPredictor
 from predictorViewer import plotP, plotPos, q2R, plotErr
-from mainLM import h
+from mainLM import h, generate_data
 
 SLAVES = 2
 MOMENT = 2169
@@ -31,7 +31,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 class InMagPredictor:
     stateNum = 10  # x, y, z, q0, q1, q2, q3, wx, wy, wz
-    measureNum = SLAVES * 3 + 3  # sensor*3 + IMU
+    measureNum = SLAVES * 3 + 2  # sensor*3 + IMU
     points = MerweScaledSigmaPoints(n=stateNum, alpha=0.3, beta=2., kappa=3 - stateNum)
     dt = 0.03  # 时间间隔[s]
     t0 = datetime.datetime.now()  # 初始化时间戳
@@ -53,21 +53,23 @@ class InMagPredictor:
         for i in range(6):
             self.ukf.R[i, i] = sensor_std
         for i in range(7, self.measureNum):
-            self.ukf.R[i, i] = 0.001
+            self.ukf.R[i, i] = 5
 
-        self.ukf.P = np.eye(self.stateNum) * 0.001
+        self.ukf.P = np.eye(self.stateNum) * 0.01
         for i in range(3):
             self.ukf.P[i, i] = 1.5 * (state0[i] - state[i]) ** 2  # 位置初始值的误差
-        self.ukf.P[3: 7, 3: 7] = 1.5 * np.array([   # 姿态四元数初始值的误差
-            [(q0i - q0) ** 2,         (q0i - q0) * (q1i - q1), (q0i - q0) * (q2i - q2), (q0i - q0) * (q3i - q3)],
-            [(q0i - q0) * (q1i - q1), (q1i - q1) ** 2,         0,                       0],
-            [(q0i - q0) * (q2i - q2), 0,                       (q2i - q2) ** 2,         0],
-            [(q0i - q0) * (q3i - q3), 0,                       0,                       (q3i - q3) ** 2]
-                                                ])
-        self.ukf.P += np.eye(self.stateNum) * 0.0001
+        # self.ukf.P[3: 7, 3: 7] = 1.5 * np.array([   # 姿态四元数初始值的误差
+        #     [(q0i - q0) ** 2,         (q0i - q0) * (q1i - q1), (q0i - q0) * (q2i - q2), (q0i - q0) * (q3i - q3)],
+        #     [(q0i - q0) * (q1i - q1), (q1i - q1) ** 2,         0,                       0],
+        #     [(q0i - q0) * (q2i - q2), 0,                       (q2i - q2) ** 2,         0],
+        #     [(q0i - q0) * (q3i - q3), 0,                       0,                       (q3i - q3) ** 2]
+        #                                         ])
+        self.ukf.P += np.eye(self.stateNum) * 0.001
 
         self.ukf.Q = np.eye(self.stateNum) * 0.05 * self.dt  # 将速度作为过程噪声来源，Qi = [v*dt]
-        Qqii, Qqij = 0.05, 0.005
+        # for i in range(3, self.stateNum):
+        #     self.ukf.Q[i, i] = 0.0001
+        Qqii, Qqij = 0.01, 0.001
         self.ukf.Q[3: 7, 3: 7] = np.array([   # 精细化定义姿态(四元数)的过程误差
             [Qqii, Qqij, Qqij, Qqij],
             [Qqij, Qqii, 0,     0],
@@ -126,7 +128,7 @@ class InMagPredictor:
         :param printBool: 【bool】是否打印输出
         :return: 【np.array】模拟的B值 + 加速度计的数值, (num_data, )
         """
-        Bmid = h(state)[:-3]  # 模拟B值数据的中间值
+        Bmid = h(state)[:-2]  # 模拟B值数据的中间值
         Bsim = np.zeros(SLAVES * 3)
         for j in range(SLAVES * 3):
             Bsim[j] = np.random.normal(Bmid[j], sensor_std, 1)
@@ -148,11 +150,12 @@ class InMagPredictor:
         :param plotBool: 【bool】是否绘图
         :param printBool: 【bool】是否打印输出
         :param maxIter: 【int】最大迭代次数
-        :return: 【tuple】 位置[x, y, z]和姿态四元数[q0, q1, q2, q3]的误差百分比
+        :return: 【tuple】 位置[x, y, z]和姿态ez的误差百分比
         """
         # self.ukf.x = state0.copy()  # 初始值
         state = states[0]  # 真实值
-        simData = self.generate_data(state, sensor_std, printBool)
+        # simData = self.generate_data(state, sensor_std, printBool)
+        simData = generate_data(self.measureNum, state, sensor_std, printBool)
 
         err_pos, err_em = (0, 0)
         for i in range(maxIter):
@@ -197,9 +200,9 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
 
 if __name__ == '__main__':
     sensor_std = 10
-    state0 = np.array([0.15, 0.15, -0.4, 1, 0, 0, 0, 0, 0, 0])  # 初始值
+    state0 = np.array([0.1, 0.1, -0.3, 1, 0, 0, 0, 0, 0, 0])  # 初始值
     states = [np.array([0, 0, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]  # 真实值
-    # pr = InMagPredictor(sensor_std, state0, states[0])
-    # err = pr.sim(states, plotType=(1, 2), sensor_std=sensor_std, printBool=True, plotBool=True)
+    pr = InMagPredictor(sensor_std, state0, states[0])
+    err = pr.sim(states, plotType=(1, 2), sensor_std=sensor_std, printBool=True, plotBool=True)
 
-    simErrDistributed(contourBar=np.linspace(0, 0.1, 11) ,sensor_std=sensor_std, pos_or_ori=0)
+    # simErrDistributed(contourBar=np.linspace(0, 0.1, 11) ,sensor_std=sensor_std, pos_or_ori=0)
