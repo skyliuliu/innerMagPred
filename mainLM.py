@@ -29,7 +29,7 @@ SLAVES = 2
 MOMENT = 2169
 DISTANCE = 0.02
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM = np.array([[0, 1, -1]]).T
+EPM = np.array([[0, 1, 0]]).T
 
 def h(state):
     '''
@@ -248,7 +248,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
     :param plotBool: 【bool】是否绘图
     :param printBool: 【bool】是否打印输出
     :param maxIter: 【int】最大迭代次数
-    :return: 【tuple】 位置[x, y, z]和姿态四元数[q0, q1, q2, q3]的误差百分比
+    :return: 【tuple】 位置[x, y, z]和姿态ez的误差百分比
     '''
     m, n = 8, 7
     for i in range(1):
@@ -305,8 +305,8 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
 if __name__ == '__main__':
-    state0 = np.array([-0.1, -0.1, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
-    states = [np.array([0.1, 0.1, -0.5, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
+    state0 = np.array([0, 0, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
+    states = [np.array([0.1, 0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
     err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
 
-    # simErrDistributed(contourBar=np.linspace(0, 0.5, 9), sensor_std=10, pos_or_ori=0)
+    # simErrDistributed(contourBar=np.linspace(0, 0.5, 9), sensor_std=10, pos_or_ori=1)
