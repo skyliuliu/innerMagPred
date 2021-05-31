@@ -29,7 +29,7 @@ SLAVES = 2
 MOMENT = 2169
 DISTANCE = 0.02
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM = np.array([[0, 1, 0]]).T
+EPM = np.array([[0, 0, 1]]).T
 
 def h(state):
     '''
@@ -105,7 +105,7 @@ def residual(state, output_data):
     """
     计算残差
     :param state: 【np.array】预估的状态量 (n, )
-    :param 【np.array】output_data: 观测量 (m, )
+    :param output_data: 【np.array】观测量 (m, )
     :return:【np.array】 residual (m, )
     """
     data_est_output = h(state[:7])
@@ -292,21 +292,21 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     n = 20
     x, y = np.meshgrid(np.linspace(-0.2, 0.2, n), np.linspace(-0.2, 0.2, n))
     state0 = np.array([0, 0, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])
-    states = [np.array([0, 0, -0.5, 0.5 * math.sqrt(3), 0.5, 0, 0])]
+    states = [np.array([0, 0, -0.5, 1, 0, 0, 0])]
     z = np.zeros((n, n))
     for i in range(n):
         for j in range(n):
-            # state0[0] = x[i, j]
-            # state0[1] = y[i, j]
-            states[0][0] = x[i, j]
-            states[0][1] = y[i, j]
+            state0[0] = x[i, j]
+            state0[1] = y[i, j]
+            # states[0][0] = x[i, j]
+            # states[0][1] = y[i, j]
             z[i, j] = sim(states, state0, sensor_std, plotBool=False, plotType=(0, 1), printBool=False)[pos_or_ori]
 
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
 if __name__ == '__main__':
-    state0 = np.array([0, 0, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
-    states = [np.array([0.1, 0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
+    state0 = np.array([0.1, 0, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
+    states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
+    # err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
 
-    # simErrDistributed(contourBar=np.linspace(0, 0.5, 9), sensor_std=10, pos_or_ori=1)
+    simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
