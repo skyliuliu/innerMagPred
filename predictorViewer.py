@@ -4,20 +4,215 @@
 Author: Liu Liu
 Email: Nicke_liu@163.com
 DateTime: 2021/4/19 16:00
-desc: 定位结果的显示工具
+desc: 定位结果的显示
 '''
 import copy
 import math
+from queue import Queue
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 from filterpy.stats import plot_covariance
+import OpenGL.GL as ogl
+import pyqtgraph as pg
+import pyqtgraph.opengl as gl
+from pyqtgraph.Qt import QtCore, QtGui
 
+
+
+class CustomTextItem(gl.GLGraphicsItem.GLGraphicsItem):
+    def __init__(self, X, Y, Z, text):
+        gl.GLGraphicsItem.GLGraphicsItem.__init__(self)
+        self.text = text
+        self.X = X
+        self.Y = Y
+        self.Z = Z
+
+    def setGLViewWidget(self, GLViewWidget):
+        self.GLViewWidget = GLViewWidget
+
+    def setText(self, text):
+        self.text = text
+        self.update()
+
+    def setX(self, X):
+        self.X = X
+        self.update()
+
+    def setY(self, Y):
+        self.Y = Y
+        self.update()
+
+    def setZ(self, Z):
+        self.Z = Z
+        self.update()
+
+    def paint(self):
+        self.GLViewWidget.qglColor(QtCore.Qt.white)
+        self.GLViewWidget.renderText(int(self.X), int(self.Y), int(self.Z), self.text)
+
+
+class Custom3DAxis(gl.GLAxisItem):
+    """Class defined to extend 'gl.GLAxisItem'."""
+
+    def __init__(self, parent, color=(1, 2, 3, 4)):
+        gl.GLAxisItem.__init__(self)
+        self.parent = parent
+        self.c = color
+        self.ticks = [-20, -10, 0, 10, 20]
+        self.setSize(x=40, y=40, z=40)
+        self.add_labels()
+        self.add_tick_values(xticks=self.ticks, yticks=self.ticks, zticks=[0, 10, 20, 30, 40])
+        self.addArrow()
+
+    def add_labels(self):
+        """Adds axes labels."""
+        x, y, z = self.size()
+        x *= 0.5
+        y *= 0.5
+        # X label
+        self.xLabel = CustomTextItem(X=x + 0.5, Y=-y / 10, Z=-z / 10, text="X(cm)")
+        self.xLabel.setGLViewWidget(self.parent)
+        self.parent.addItem(self.xLabel)
+        # Y label
+        self.yLabel = CustomTextItem(X=-x / 10, Y=y + 0.5, Z=-z / 10, text="Y(cm)")
+        self.yLabel.setGLViewWidget(self.parent)
+        self.parent.addItem(self.yLabel)
+        # Z label
+        self.zLabel = CustomTextItem(X=-x / 10, Y=-y / 10, Z=z + 1, text="Z(cm)")
+        self.zLabel.setGLViewWidget(self.parent)
+        self.parent.addItem(self.zLabel)
+
+    def add_tick_values(self, xticks=None, yticks=None, zticks=None):
+        """Adds ticks values."""
+        x, y, z = self.size()
+        xtpos = np.linspace(-0.5 * x, 0.5 * x, len(xticks))
+        ytpos = np.linspace(-0.5 * y, 0.5 * y, len(yticks))
+        ztpos = np.linspace(0, z, len(zticks))
+        # X label
+        for i, xt in enumerate(xticks):
+            val = CustomTextItem(X=xtpos[i], Y=2, Z=0, text=str(xt))
+            val.setGLViewWidget(self.parent)
+            self.parent.addItem(val)
+        # Y label
+        for i, yt in enumerate(yticks):
+            val = CustomTextItem(X=2, Y=ytpos[i], Z=0, text=str(yt))
+            val.setGLViewWidget(self.parent)
+            self.parent.addItem(val)
+        # Z label
+        for i, zt in enumerate(zticks):
+            val = CustomTextItem(X=0, Y=2, Z=ztpos[i], text=str(zt))
+            val.setGLViewWidget(self.parent)
+            self.parent.addItem(val)
+
+    def addArrow(self):
+        # add X axis arrow
+        arrowXData = gl.MeshData.cylinder(rows=10, cols=20, radius=[0.5, 0.], length=2)
+        arrowX = gl.GLMeshItem(meshdata=arrowXData, color=(0, 0, 1, 0.6), shader='balloon', glOptions='opaque')
+        arrowX.rotate(90, 0, 1, 0)
+        arrowX.translate(20, 0, 0)
+        self.parent.addItem(arrowX)
+        # add Y axis arrow
+        arrowYData = gl.MeshData.cylinder(rows=10, cols=20, radius=[0.5, 0.], length=2)
+        arrowY = gl.GLMeshItem(meshdata=arrowXData, color=(1, 0, 1, 0.6), shader='balloon', glOptions='opaque')
+        arrowY.rotate(270, 1, 0, 0)
+        arrowY.translate(0, 20, 0)
+        self.parent.addItem(arrowY)
+        # add Z axis arrow
+        arrowZData = gl.MeshData.cylinder(rows=10, cols=20, radius=[0.5, 0.], length=2)
+        arrowZ = gl.GLMeshItem(meshdata=arrowXData, color=(0, 1, 0, 0.6), shader='balloon', glOptions='opaque')
+        arrowZ.translate(0, 0, 40)
+        self.parent.addItem(arrowZ)
+
+    def paint(self):
+        self.setupGLState()
+        if self.antialias:
+            ogl.glEnable(ogl.GL_LINE_SMOOTH)
+            ogl.glHint(ogl.GL_LINE_SMOOTH_HINT, ogl.GL_NICEST)
+        ogl.glBegin(ogl.GL_LINES)
+
+        x, y, z = self.size()
+        # Draw Z
+        ogl.glColor4f(0, 1, 0, 10.6)  # z is green
+        ogl.glVertex3f(0, 0, 0)
+        ogl.glVertex3f(0, 0, z)
+        # Draw Y
+        ogl.glColor4f(1, 0, 1, 10.6)  # y is grape
+        ogl.glVertex3f(0, -0.5 * y, 0)
+        ogl.glVertex3f(0, 0.5 * y, 0)
+        # Draw X
+        ogl.glColor4f(0, 0, 1, 10.6)  # x is blue
+        ogl.glVertex3f(-0.5 * x, 0, 0)
+        ogl.glVertex3f(0.5 * x, 0, 0)
+        ogl.glEnd()
+
+
+def track3D(state):
+    app = QtGui.QApplication([])
+    w = gl.GLViewWidget()
+    w.setWindowTitle('3d trajectory')
+    w.resize(600, 500)
+    # instance of Custom3DAxis
+    axis = Custom3DAxis(w, color=(0.6, 0.6, 0.2, .6))
+    w.addItem(axis)
+    w.opts['distance'] = 75
+    w.opts['center'] = pg.Vector(0, 0, 15)
+    # add xy grid
+    gx = gl.GLGridItem()
+    gx.setSize(x=40, y=40, z=10)
+    gx.setSpacing(x=5, y=5)
+    w.addItem(gx)
+    # trajectory line
+    pos0 = np.array([[0, 0, 0]])
+    pos, q = np.array(state[:3]), state[3:7]
+    uAxis, angle = q2ua(q)
+    track0 = np.concatenate((pos0, pos.reshape(1, 3)))
+    plt = gl.GLLinePlotItem(pos=track0, width=2, color=(1, 0, 0, 0.6))
+    w.addItem(plt)
+    # orientation arrow
+    sphereData = gl.MeshData.sphere(rows=20, cols=20, radius=0.6)
+    sphereMesh = gl.GLMeshItem(meshdata=sphereData, smooth=True, shader='shaded', glOptions='opaque')
+    w.addItem(sphereMesh)
+    ArrowData = gl.MeshData.cylinder(rows=20, cols=20, radius=[0.5, 0], length=1.5)
+    ArrowMesh = gl.GLMeshItem(meshdata=ArrowData, smooth=True, color=(1, 0, 0, 0.6), shader='balloon',
+                              glOptions='opaque')
+    ArrowMesh.rotate(angle, uAxis[0], uAxis[1], uAxis[2])
+    w.addItem(ArrowMesh)
+    w.show()
+
+    i = 1
+    pts = pos.reshape(1, 3)
+
+    def update():
+        '''update position and orientation'''
+        nonlocal i, pts, state
+        pos, q = np.array(state[:3]) * 100, state[3:7]
+        uAxis, angle = q2ua(q)
+        pt = (pos).reshape(1, 3)
+        if pts.size < 150:
+            pts = np.concatenate((pts, pt))
+        else:
+            pts = np.concatenate((pts[-50:, :], pt))
+        plt.setData(pos=pts)
+        ArrowMesh.resetTransform()
+        sphereMesh.resetTransform()
+        ArrowMesh.rotate(angle, uAxis[0], uAxis[1], uAxis[2])
+        ArrowMesh.translate(*pos)
+        sphereMesh.translate(*pos)
+        i += 1
+
+    timer = QtCore.QTimer()
+    timer.timeout.connect(update)
+    timer.start(50)
+
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
 
 def q2R(q):
     '''
     从四元数求旋转矩阵
-    :param q: 四元数
+    :param q: 【np.array】四元数
     :return: R 旋转矩阵
     '''
     q0, q1, q2, q3 = q / np.linalg.norm(q)
@@ -28,10 +223,21 @@ def q2R(q):
     ])
     return R
 
+def q2ua(q):
+    '''
+    从四元数求旋转向量和旋转角
+    :param q:
+    :return:
+    '''
+    q0, q1, q2, q3 = q / np.linalg.norm(q)
+    angle = 2 * math.acos(q0)
+    u = np.array([q1, q2, q3]) / math.sin(0.5 * angle)
+    return u, angle * 57.3
+
 def q2Euler(q):
     '''
     从四元数求欧拉角
-    :param q: 四元数
+    :param q: 【np.array】四元数
     :return: 【np.array】 [pitch, roll, yaw]
     '''
     q0, q1, q2, q3 = q / np.linalg.norm(q)
@@ -181,3 +387,147 @@ def plotErr(x, y, z, contourBar, titleName):
     cntr = plt.contour(x, y, z, contourBar, colors='black', linewidths=0.5)    # 描绘等高线轮廓
     plt.clabel(cntr, inline_spacing=1, fmt='%.2f', fontsize=8, colors='black')     # 标识等高线的数值
     plt.show()
+
+
+def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
+    '''
+    对sensor读取的结果进行绘图
+    :param sensorDict: 【dict】sensor名字的列表
+    :param data0:  【Array】sensor原始数据的数组
+    :param data0Sigma: 【Array】sensor原始数据标准差的数组
+    :param dataSmooth: 【Array】平滑过的sensor原始数据
+    :return:
+    '''
+    app = pg.Qt.QtGui.QApplication([])
+    win = pg.GraphicsLayoutWidget(show=True, title="Sensor Viewer")
+    win.resize(900, 800)
+    win.setWindowTitle(str(sensorDict)[1: -1])
+    pg.setConfigOptions(antialias=True)
+
+    n = Queue()
+    curves = []
+    datas = []  # [s1_x_Origin, s1_x_Smooth, s1_y_Origin, s1_y_Smooth, s1_z_Origin, s1_z_Smooth, ... ]
+    curveSigma = []
+    dataSigma = []  # [s1_x_sigma, s1_y_sigma, s1_z_sigma, ...]
+
+    def multiCurve(sensorName):
+        '''
+        绘制多线图, 观察原始数据和标准差
+        :param sensorName: 【string】 sensor名称
+        :return:
+        '''
+        colours = {'x': 'b', 'y': 'g', 'z': 'r'}
+        if sensorName == 'accelerometer':
+            units = 'm/s^2'
+            label = 'a'
+        elif sensorName == 'gyroscope':
+            units = 'deg/s'
+            label = 'w'
+        elif sensorName.startswith('magSensor'):
+            units = 'Gs'
+            label = 'B'
+        else:
+            raise NameError("sensor output is not correct!")
+
+        for i in range(2):
+            if i == 0:
+                p = win.addPlot(title=sensorName)
+            elif i and data0Sigma:
+                p = win.addPlot(title=sensorName + '_std')
+            else:
+                return
+            p.addLegend(offset=(1, 1))
+            p.setLabel('left', label, units=units)
+            p.setLabel('bottom', 'points', units='1')
+            p.showGrid(x=True, y=True)
+            for axis in ['x', 'y', 'z']:
+                if i and data0Sigma:
+                    cSigma = p.plot(pen=colours[axis], name=axis)
+                    curveSigma.append(cSigma)
+                    dataSigma.append(Queue())
+                elif i == 0:
+                    cOrigin = p.plot(pen=colours[axis], name=axis)
+                    # cPredict = p.plot(pen='g', name='Smooth')
+                    curves.append(cOrigin)
+                    # curves.append(cPredict)
+                    datas.append(Queue())  # origin
+                    # datas.append(Queue())  # smooth
+
+    def singleCurve(sensorName):
+        '''
+        绘制单线图，观察原始数据和平滑数据
+        :param sensorName: 【string】 sensor名称
+        :return:
+        '''
+        colours = {'x': 'b', 'y': 'g', 'z': 'r'}
+        if sensorName == 'accelerometer':
+            units = 'm/s^2'
+            label = 'a'
+        elif sensorName == 'gyroscope':
+            units = 'deg/s'
+            label = 'w'
+        elif sensorName.startswith('magSensor'):
+            units = 'Gs'
+            label = 'B'
+        else:
+            raise NameError("sensor output is not correct!")
+
+        for axis in ['x', 'y', 'z']:
+            p = win.addPlot(name=sensorName, title=sensorName + '_' + axis)
+            # p.addLegend()
+            p.setLabel('left', label, units=units)
+            p.setLabel('bottom', 'points', units='1')
+            p.showGrid(x=True, y=True)
+            cOrigin = p.plot(pen=colours[axis])
+            # cPredict = p.plot(pen='g', name='Smooth')
+            curves.append(cOrigin)
+            # curves.append(cPredict)
+            datas.append(Queue())  # origin
+            # datas.append(Queue())  # smooth
+
+
+    if 'imu' in sensorDict.keys():
+        multiCurve('accelerometer')
+        win.nextRow()
+        multiCurve('gyroscope')
+    elif 'magSensor1' in sensorDict.keys():
+        multiCurve('magSensor1')
+        win.nextRow()
+        multiCurve('magSensor2')
+
+    i = 1
+    def update():
+        nonlocal i
+
+        for _ in range(4):
+            n.put(i)
+            i += 1
+        sensorNum = len(data0) // 4
+        for dataRow in range(sensorNum):
+            for dataCol in range(4):
+                datas[dataRow].put(data0[dataRow + dataCol * sensorNum])
+                if data0Sigma:
+                    dataSigma[dataRow].put(data0Sigma[dataRow + dataCol * sensorNum])
+
+        if i > 400:
+            n.get()
+            for q in datas:
+                q.get()
+            for qs in dataSigma:
+                qs.get()
+        for (curve, data) in zip(curves, datas):
+            curve.setData(n.queue, data.queue)
+        if data0Sigma:
+            for (curve, data) in zip(curveSigma, dataSigma):
+                curve.setData(n.queue, data.queue)
+
+    timer = pg.Qt.QtCore.QTimer()
+    timer.timeout.connect(update)
+    timer.start(100)
+
+    if (sys.flags.interactive != 1) or not hasattr(pg.Qt.QtCore, 'PYQT_VERSION'):
+        pg.Qt.QtGui.QApplication.instance().exec_()
+
+
+if __name__ == '__main__':
+    track3D(np.array([0, 0, 0.2, 1, 2, 1, 0]))
