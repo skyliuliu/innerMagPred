@@ -10,6 +10,7 @@ desc: 从串口读取胶囊上的IMU和2个AKM磁传感器的数据
     name：       head/type/size/objid/instid/timestamp/data/crc
     len(byte) :   1 / 1  / 2(从head-crc) /  4   /   2  / 2(该位上发不存在) / 0~64/ 1
 '''
+import json
 import multiprocessing
 from multiprocessing.dummy import Process
 import time
@@ -66,14 +67,15 @@ def crc8Calculate(curCrc, data):
     return val
 
 
-def sensorUnpack(data, outputDataSigma):
+def sensorUnpack(data, offset, n):
     '''
     对读到的原始数据进行解包处理
     :param data:
-    :param outputDataSigma:
+    :param offset: 【bool】是否扣除背景磁场
+    :param n: 【int】背景磁场累积次数
     :return:
     '''
-    # print(data)
+    # print(n)
     imuSensorData = np.zeros((6, 4), dtype='float32')
     accel_x = imuSensorData[0]
     accel_y = imuSensorData[1]
@@ -83,12 +85,6 @@ def sensorUnpack(data, outputDataSigma):
     gyro_z = imuSensorData[5]
 
     magSensorData = np.zeros((6, 4))
-    mag1_x = magSensorData[0]
-    mag1_y = magSensorData[1]
-    mag1_z = magSensorData[2]
-    mag2_x = magSensorData[3]
-    mag2_y = magSensorData[4]
-    mag2_z = magSensorData[5]
     timedata = np.zeros(4)
 
     sensorDataSigma = np.zeros((6, 4), dtype='float32')
@@ -107,23 +103,23 @@ def sensorUnpack(data, outputDataSigma):
             gyro_y[i] = np.asarray(struct.unpack('<f', data[70+i*4:74+i*4]))
             gyro_z[i] = np.asarray(struct.unpack('<f', data[86+i*4:90+i*4]))
             # AKM磁传感器换算后的单位为[Gs]
-            mag1_x[i] = np.asarray(struct.unpack('<h', data[102+i*2:104+i*2])) * 0.01
-            mag1_y[i] = np.asarray(struct.unpack('<h', data[110+i*2:112+i*2])) * 0.01
-            mag1_z[i] = np.asarray(struct.unpack('<h', data[118+i*2:120+i*2])) * 0.01
-            mag2_x[i] = np.asarray(struct.unpack('<h', data[126+i*2:128+i*2])) * 0.01
-            mag2_y[i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * 0.01
-            mag2_z[i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * 0.01
+            magSensorData[0, i] = np.asarray(struct.unpack('<h', data[102+i*2:104+i*2])) * 0.01
+            magSensorData[1, i] = np.asarray(struct.unpack('<h', data[110+i*2:112+i*2])) * 0.01
+            magSensorData[2, i] = np.asarray(struct.unpack('<h', data[118+i*2:120+i*2])) * 0.01
+            magSensorData[3, i] = np.asarray(struct.unpack('<h', data[126+i*2:128+i*2])) * 0.01
+            magSensorData[4, i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * 0.01
+            magSensorData[5, i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * 0.01
             # 时间戳
             timedata[i] = np.asarray(struct.unpack('<f', data[150+i*4:154+i*4]))
 
             # 存储所有sensor的所有输出，用于计算标准差std
             if outputDataSigma:
-                sensor1xAll.append(mag1_x[i])
-                sensor1yAll.append(mag1_y[i])
-                sensor1zAll.append(mag1_z[i])
-                sensor2xAll.append(mag2_x[i])
-                sensor2yAll.append(mag2_y[i])
-                sensor2zAll.append(mag2_z[i])
+                sensor1xAll.append(magSensorData[0, i])
+                sensor1yAll.append(magSensorData[1, i])
+                sensor1zAll.append(magSensorData[2, i])
+                sensor2xAll.append(magSensorData[3, i])
+                sensor2yAll.append(magSensorData[4, i])
+                sensor2zAll.append(magSensorData[5, i])
                 sensorDataSigma[0][i] = np.array(sensor1xAll).std()
                 sensorDataSigma[1][i] = np.array(sensor1yAll).std()
                 sensorDataSigma[2][i] = np.array(sensor1zAll).std()
@@ -131,9 +127,29 @@ def sensorUnpack(data, outputDataSigma):
                 sensorDataSigma[4][i] = np.array(sensor2yAll).std()
                 sensorDataSigma[5][i] = np.array(sensor2zAll).std()
 
+        if (not offset) and n < 25:
+            for i in range(6):
+                magBg[i] = magSensorData[i].sum() + magBg[i]
+        elif (not offset) and n == 25:
+            for i in range(6):
+                magBg[i] = magBg[i] / n / 4
+            offset = True
+            print('Calibrate ok!')
+            # 保存背景磁场到本地json文件
+            bg = {}
+            for row in range(6):
+                bg['B{}'.format(row)] = magBg[row]
+            f = open('bg.json', 'w')
+            json.dump(bg, f, indent=4)
+            f.close()
+        else:
+            for i in range(6):
+                magSensorData[i] = magSensorData[i] - magBg[i]
+
         outputData[:] = np.hstack(np.stack(magSensorData, axis=1))
         if outputDataSigma:
             outputDataSigma[:] = np.hstack(np.stack(sensorDataSigma, axis=1))
+
         #print(outputData[:])
         # print("accel_x" ,accel_x)
         # print("accel_y", accel_y)
@@ -141,17 +157,12 @@ def sensorUnpack(data, outputDataSigma):
         # print("gyro_x" ,gyro_x)
         # print("gyro_y", gyro_y)
         # print("gyro_z", gyro_z)
-        # print("mag1_x" ,mag1_x)
-        # print("mag1_y", mag1_y)
-        # print("mag1_z", mag1_z)
-        # print("mag2_x" ,mag2_x)
-        # print("mag2_y", mag2_y)
-        # print("mag2_z", mag2_z)
+        # print("magBg:\n", magBg[:])
         # print("timedata", timedata)
         #print("------------------------------------\n")
 
 
-def receive(serial_port, outputDataSigma):
+def receive(serial_port, offset):
     '''
     读串口
     :param serial_port: 串口端口号
@@ -161,6 +172,17 @@ def receive(serial_port, outputDataSigma):
     # Wait a second to let the port initialize
     time.sleep(0.01)
     viodFlag = b''
+
+    n = 0
+    # 读取本地保存的背景磁场
+    if offset:
+        f = open('bg.json', 'r')
+        bg = json.load(f)
+        for row in range(6):
+            magBg[row] = bg.get('B{}'.format(row), 0)
+        f.close()
+        print('get background B OK!')
+
     while True:
         data = serial_port.read()   # read data from serial_port
 
@@ -189,7 +211,8 @@ def receive(serial_port, outputDataSigma):
                         crc8Val = dataBuff[-1]
                         decData = binascii.b2a_hex(dataBuff).decode('utf-8')
 
-                        sensorUnpack(dataBuff, outputDataSigma)
+                        sensorUnpack(dataBuff, offset, n)
+                        n += 1
 
 
 def send(serial_port):
@@ -231,14 +254,17 @@ if __name__ == '__main__':
         raise RuntimeError ("open failed")
 
     # def data struct
-    outputData = multiprocessing.Array('f', range(24))
-    outputDataSigma = multiprocessing.Array('f', range(24))
-    #outputDataSigma = None
+    outputData = multiprocessing.Array('f', [0] * 24)
+    # outputDataSigma = multiprocessing.Array('f', [0] * 24)
+    outputDataSigma = None
+    magBg = multiprocessing.Array('f', [0] * 6)
+    print(magBg[:])
 
     # Wait a second to let the port initialize
     # send(serial_port)
     # receive data in a new process
-    pRec = Process(target=receive, args=(serial_port, outputDataSigma))
+    pRec = Process(target=receive, args=(serial_port, False))
+    pRec.daemon = True
     pRec.start()
 
     # plot sensor data
