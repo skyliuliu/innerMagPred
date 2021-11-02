@@ -509,7 +509,7 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
                 if data0Sigma:
                     dataSigma[dataRow].put(data0Sigma[dataRow + dataCol * sensorNum])
 
-        if i > 400:
+        if i > 50:
             n.get()
             for q in datas:
                 q.get()

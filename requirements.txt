@@ -1,6 +1,8 @@
+AllanTools==2019.9
 filterpy==1.4.5
 matplotlib==3.3.1
 numpy==1.19.0
 PyOpenGL==3.1.5
 pyqtgraph==0.11.0
 pyserial==3.5
+PyQt5==5.15.1

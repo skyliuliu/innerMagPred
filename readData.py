@@ -103,12 +103,12 @@ def sensorUnpack(data, offset, n):
             gyro_y[i] = np.asarray(struct.unpack('<f', data[70+i*4:74+i*4]))
             gyro_z[i] = np.asarray(struct.unpack('<f', data[86+i*4:90+i*4]))
             # AKM磁传感器换算后的单位为[Gs]
-            magSensorData[0, i] = np.asarray(struct.unpack('<h', data[102+i*2:104+i*2])) * 0.01
-            magSensorData[1, i] = np.asarray(struct.unpack('<h', data[110+i*2:112+i*2])) * 0.01
-            magSensorData[2, i] = np.asarray(struct.unpack('<h', data[118+i*2:120+i*2])) * 0.01
-            magSensorData[3, i] = np.asarray(struct.unpack('<h', data[126+i*2:128+i*2])) * 0.01
-            magSensorData[4, i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * 0.01
-            magSensorData[5, i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * 0.01
+            magSensorData[0, i] = np.asarray(struct.unpack('<h', data[102+i*2:104+i*2])) * 0.031
+            magSensorData[1, i] = np.asarray(struct.unpack('<h', data[110+i*2:112+i*2])) * 0.031
+            magSensorData[2, i] = np.asarray(struct.unpack('<h', data[118+i*2:120+i*2])) * 0.031
+            magSensorData[3, i] = np.asarray(struct.unpack('<h', data[126+i*2:128+i*2])) * 0.031
+            magSensorData[4, i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * 0.031
+            magSensorData[5, i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * 0.031
             # 时间戳
             timedata[i] = np.asarray(struct.unpack('<f', data[150+i*4:154+i*4]))
 
@@ -243,7 +243,7 @@ def send(serial_port):
 
 
 if __name__ == '__main__':
-    serial_port = serial.Serial('COM9', 230400, timeout=0.5)
+    serial_port = serial.Serial('COM14', 230400, timeout=0.5)
     # snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     snesorDict = {'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     #snesorDict = {'imu': 'LSM6DS3TR-C'}
@@ -255,15 +255,14 @@ if __name__ == '__main__':
 
     # def data struct
     outputData = multiprocessing.Array('f', [0] * 24)
-    # outputDataSigma = multiprocessing.Array('f', [0] * 24)
-    outputDataSigma = None
+    outputDataSigma = multiprocessing.Array('f', [0] * 24)
+    # outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
-    print(magBg[:])
 
     # Wait a second to let the port initialize
-    # send(serial_port)
+    send(serial_port)
     # receive data in a new process
-    pRec = Process(target=receive, args=(serial_port, False))
+    pRec = Process(target=receive, args=(serial_port, True))
     pRec.daemon = True
     pRec.start()
 
