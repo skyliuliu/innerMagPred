@@ -8,11 +8,14 @@ desc:使用LM非线性优化+互补滤波算法进行内置式磁定位
 '''
 import datetime
 import math
+import multiprocessing
 
 import numpy as np
 import matplotlib.pyplot as plt
+import serial
 
 from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos
+from readData import send, receive
 
 
 tao = 1e-3
@@ -27,7 +30,8 @@ ems = []
 
 SLAVES = 2
 MOMENT = 2169
-DISTANCE = 0.02
+g0 = 9.8
+DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
 EPM = np.array([[0, 0, 1]]).T
 
@@ -57,13 +61,14 @@ def h(state):
     # EPM坐标系下每个sensor的B值[mGs]
     B1 = MOMENT * np.dot(r1Norm ** (-3), np.subtract(3 * np.dot(np.inner(er1, eEPM), er1), eEPM))
     B2 = MOMENT * np.dot(r2Norm ** (-3), np.subtract(3 * np.dot(np.inner(er2, eEPM), er2), eEPM))
-
+    # 变换到胶囊坐标系下的sensor读数
     B1s = np.dot(R, B1)
     B2s = np.dot(R, B2)
 
-    pitch, roll, yaw = q2Euler(q)
+    # 加速度计的读数
+    a_s = emz * g0
 
-    return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), [pitch, roll]))
+    return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), a_s))
 
 
 
@@ -210,9 +215,8 @@ def stateOut(state, state2, t0, i, mse, printStr, printBool):
     R = q2R(state[3:7])
     emx = np.round(R[:, 0], 3)
     emz = np.round(R[:, -1], 3)
-    euler = q2Euler(state[3: 7])
     B = h(state)[:6]
-    print('i={}, pos={}m, q={}, emz={}, euler={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(euler, 3), np.round(B)))
+    print('i={}, pos={}m, q={}, emz={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(B)))
 
 
 def generate_data(num_data, state, sensor_std, printBool):
@@ -250,7 +254,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
     :param maxIter: 【int】最大迭代次数
     :return: 【tuple】 位置[x, y, z]和姿态ez的误差百分比
     '''
-    m, n = 8, 7
+    m, n = 9, 7
     for i in range(1):
         # run
         output_data = generate_data(m, states[i], sensor_std, printBool)
@@ -304,9 +308,41 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
 
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
+def runReadData(state0, printBool, maxIter=100):
+    '''
+    跑实际的数据来实现定位
+    :param state0: 初始值
+    :param printBool: 【bool】是否打印输出
+    :param maxIter: 【int】最大迭代次数
+    :return:
+    '''
+    serial_port = serial.Serial('COM14', 230400, timeout=0.5)
+    if serial_port.isOpen() :
+        print("open success!\n")
+    else :
+        raise RuntimeError ("open failed")
+
+    outputData = multiprocessing.Array('f', [0] * 36)
+    magBg = multiprocessing.Array('f', [0] * 6)
+
+    send(serial_port)
+    pRec = multiprocessing.Process(target=receive, args=(serial_port, True))
+    pRec.daemon = True
+    pRec.start()
+
+    while True:
+        measureData = np.array(outputData[:9])
+        LM(state0, measureData, 7, maxIter, printBool)
+
+
+
 if __name__ == '__main__':
     state0 = np.array([0.1, 0, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
-    states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    # err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
 
-    simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
+    # 仿真模拟
+    # states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
+    # err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
+    # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
+
+    # 实际运行
+    runReadData(state0, printBool=True)

@@ -141,14 +141,14 @@ def sensorUnpack(data, offset, n):
             for i in range(6):
                 magSensorData[i] = magSensorData[i] - magBg[i]
 
-        outputData[:] = np.hstack(np.stack(magSensorData, axis=1))
+        outputData[:] = np.hstack(np.stack(np.vstack((magSensorData, imuSensorData[:3])), axis=1))
         if outputDataSigma:
             outputDataSigma[:] = np.hstack(np.stack(sensorDataSigma, axis=1))
 
-        #print(outputData[:])
-        # print("accel_x" ,accel_x)
-        # print("accel_y", accel_y)
-        # print("accel_z", accel_z)
+        print(outputData[:])
+        print("accel_x" ,accel_x)
+        print("accel_y", accel_y)
+        print("accel_z", accel_z)
         # print("gyro_x" ,gyro_x)
         # print("gyro_y", gyro_y)
         # print("gyro_z", gyro_z)
@@ -249,13 +249,13 @@ if __name__ == '__main__':
         raise RuntimeError ("open failed")
 
     # def data struct
-    outputData = multiprocessing.Array('f', [0] * 24)
-    outputDataSigma = multiprocessing.Array('f', [0] * 24)
-    # outputDataSigma = None
+    outputData = multiprocessing.Array('f', [0] * 36)
+    # outputDataSigma = multiprocessing.Array('f', [0] * 24)
+    outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
 
     # Wait a second to let the port initialize
-    send(serial_port)
+    # send(serial_port)
     # receive data in a new process
     pRec = Process(target=receive, args=(serial_port, True))
     pRec.daemon = True
