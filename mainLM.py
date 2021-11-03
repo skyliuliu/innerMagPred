@@ -9,6 +9,7 @@ desc:使用LM非线性优化+互补滤波算法进行内置式磁定位
 import datetime
 import math
 import multiprocessing
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -33,7 +34,7 @@ MOMENT = 2169
 g0 = 9.8
 DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM = np.array([[0, 0, 1]]).T
+EPM = np.array([[1, 0, 0]]).T
 
 def h(state):
     '''
@@ -63,7 +64,9 @@ def h(state):
     B2 = MOMENT * np.dot(r2Norm ** (-3), np.subtract(3 * np.dot(np.inner(er2, eEPM), er2), eEPM))
     # 变换到胶囊坐标系下的sensor读数
     B1s = np.dot(R, B1)
+    B1s[-1] *= -1
     B2s = np.dot(R, B2)
+
 
     # 加速度计的读数
     a_s = emz * g0
@@ -308,7 +311,7 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
 
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
-def runReadData(state0, printBool, maxIter=100):
+def runReadData(state0, printBool, maxIter=50):
     '''
     跑实际的数据来实现定位
     :param state0: 初始值
@@ -316,19 +319,20 @@ def runReadData(state0, printBool, maxIter=100):
     :param maxIter: 【int】最大迭代次数
     :return:
     '''
-    serial_port = serial.Serial('COM14', 230400, timeout=0.5)
+    serial_port = serial.Serial('COM6', 230400, timeout=0.5)
     if serial_port.isOpen() :
         print("open success!\n")
     else :
         raise RuntimeError ("open failed")
 
-    outputData = multiprocessing.Array('f', [0] * 36)
+    outputData = multiprocessing.Array('f', [0] * 48)
     magBg = multiprocessing.Array('f', [0] * 6)
 
     send(serial_port)
-    pRec = multiprocessing.Process(target=receive, args=(serial_port, True))
-    pRec.daemon = True
+    pRec = multiprocessing.dummy.Process(target=receive, args=(serial_port, outputData, magBg, True, None))
+    # pRec.daemon = True
     pRec.start()
+    time.sleep(2)
 
     while True:
         measureData = np.array(outputData[:9])
@@ -337,7 +341,7 @@ def runReadData(state0, printBool, maxIter=100):
 
 
 if __name__ == '__main__':
-    state0 = np.array([0.1, 0, -0.3, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
+    state0 = np.array([0, 0, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
 
     # 仿真模拟
     # states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值

@@ -68,7 +68,7 @@ def crc8Calculate(curCrc, data):
     return val
 
 
-def sensorUnpack(data, offset, n):
+def sensorUnpack(data, offset, outputData, magBg, n, outputDataSigma):
     '''
     对读到的原始数据进行解包处理
     :param data:
@@ -141,14 +141,14 @@ def sensorUnpack(data, offset, n):
             for i in range(6):
                 magSensorData[i] = magSensorData[i] - magBg[i]
 
-        outputData[:] = np.hstack(np.stack(np.vstack((magSensorData, imuSensorData[:3])), axis=1))
+        outputData[:] = np.hstack(np.stack(np.vstack((magSensorData, imuSensorData)), axis=1))
         if outputDataSigma:
             outputDataSigma[:] = np.hstack(np.stack(sensorDataSigma, axis=1))
 
-        print(outputData[:])
-        print("accel_x" ,accel_x)
-        print("accel_y", accel_y)
-        print("accel_z", accel_z)
+        # print(outputData[:])
+        # print("accel_x" ,accel_x)
+        # print("accel_y", accel_y)
+        # print("accel_z", accel_z)
         # print("gyro_x" ,gyro_x)
         # print("gyro_y", gyro_y)
         # print("gyro_z", gyro_z)
@@ -157,7 +157,7 @@ def sensorUnpack(data, offset, n):
         #print("------------------------------------\n")
 
 
-def receive(serial_port, offset):
+def receive(serial_port, outputData, magBg, offset, outputDataSigma=None):
     '''
     读串口
     :param serial_port: 串口端口号
@@ -206,7 +206,7 @@ def receive(serial_port, offset):
                         crc8Val = dataBuff[-1]
                         decData = binascii.b2a_hex(dataBuff).decode('utf-8')
 
-                        sensorUnpack(dataBuff, offset, n)
+                        sensorUnpack(dataBuff, offset, outputData, magBg, n, outputDataSigma)
                         n += 1
 
 
@@ -238,9 +238,9 @@ def send(serial_port):
 
 
 if __name__ == '__main__':
-    serial_port = serial.Serial('COM14', 230400, timeout=0.5)
-    # snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
-    snesorDict = {'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
+    serial_port = serial.Serial('COM6', 230400, timeout=0.5)
+    snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
+    # snesorDict = {'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     #snesorDict = {'imu': 'LSM6DS3TR-C'}
 
     if serial_port.isOpen() :
@@ -249,15 +249,15 @@ if __name__ == '__main__':
         raise RuntimeError ("open failed")
 
     # def data struct
-    outputData = multiprocessing.Array('f', [0] * 36)
+    outputData = multiprocessing.Array('f', [0] * 48)
     # outputDataSigma = multiprocessing.Array('f', [0] * 24)
     outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
 
     # Wait a second to let the port initialize
-    # send(serial_port)
+    send(serial_port)
     # receive data in a new process
-    pRec = Process(target=receive, args=(serial_port, True))
+    pRec = Process(target=receive, args=(serial_port, outputData, magBg, True))
     pRec.daemon = True
     pRec.start()
 

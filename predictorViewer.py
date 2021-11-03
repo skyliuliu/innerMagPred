@@ -485,15 +485,14 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
             datas.append(Queue())  # origin
             # datas.append(Queue())  # smooth
 
-
+    if 'magSensor1' in sensorDict.keys():
+        multiCurve('magSensor1')
+        multiCurve('magSensor2')
+        win.nextRow()
     if 'imu' in sensorDict.keys():
         multiCurve('accelerometer')
-        win.nextRow()
+        # win.nextRow()
         multiCurve('gyroscope')
-    elif 'magSensor1' in sensorDict.keys():
-        multiCurve('magSensor1')
-        win.nextRow()
-        multiCurve('magSensor2')
 
     i = 1
     def update():
@@ -509,7 +508,7 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
                 if data0Sigma:
                     dataSigma[dataRow].put(data0Sigma[dataRow + dataCol * sensorNum])
 
-        if i > 50:
+        if i > 20:
             n.get()
             for q in datas:
                 q.get()
