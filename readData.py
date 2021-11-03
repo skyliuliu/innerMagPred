@@ -17,6 +17,7 @@ import time
 import struct
 import ctypes
 import binascii
+from queue import Queue
 
 import numpy as np
 import serial
@@ -31,13 +32,13 @@ UAVTALK_TYPE_VER = 0x20
 UAV_OBJ_SENSOR = 0x5F9FFBCA
 # 重力加速度【m/s^2】
 CONST_g0 = 9.8
+# AKMsensor的灵敏度【mGs/LSB】
+magSensitivity = 0.031
 # 存储所有sensor的所有输出，用于计算标准差std
-sensor1xAll = []
-sensor1yAll = []
-sensor1zAll = []
-sensor2xAll = []
-sensor2yAll = []
-sensor2zAll = []
+sensorAll = []
+for sensor_i in range(6):
+    sensorAll.append(Queue())
+
 
 def PIOS_CRC_updateByte(crc, data) :
     crc_table = [
@@ -103,29 +104,23 @@ def sensorUnpack(data, offset, n):
             gyro_y[i] = np.asarray(struct.unpack('<f', data[70+i*4:74+i*4]))
             gyro_z[i] = np.asarray(struct.unpack('<f', data[86+i*4:90+i*4]))
             # AKM磁传感器换算后的单位为[Gs]
-            magSensorData[0, i] = np.asarray(struct.unpack('<h', data[102+i*2:104+i*2])) * 0.031
-            magSensorData[1, i] = np.asarray(struct.unpack('<h', data[110+i*2:112+i*2])) * 0.031
-            magSensorData[2, i] = np.asarray(struct.unpack('<h', data[118+i*2:120+i*2])) * 0.031
-            magSensorData[3, i] = np.asarray(struct.unpack('<h', data[126+i*2:128+i*2])) * 0.031
-            magSensorData[4, i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * 0.031
-            magSensorData[5, i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * 0.031
+            magSensorData[0, i] = np.asarray(struct.unpack('<h', data[102+i*2:104+i*2])) * magSensitivity
+            magSensorData[1, i] = np.asarray(struct.unpack('<h', data[110+i*2:112+i*2])) * magSensitivity
+            magSensorData[2, i] = np.asarray(struct.unpack('<h', data[118+i*2:120+i*2])) * magSensitivity
+            magSensorData[3, i] = np.asarray(struct.unpack('<h', data[126+i*2:128+i*2])) * magSensitivity
+            magSensorData[4, i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * magSensitivity
+            magSensorData[5, i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * magSensitivity
             # 时间戳
             timedata[i] = np.asarray(struct.unpack('<f', data[150+i*4:154+i*4]))
 
             # 存储所有sensor的所有输出，用于计算标准差std
             if outputDataSigma:
-                sensor1xAll.append(magSensorData[0, i])
-                sensor1yAll.append(magSensorData[1, i])
-                sensor1zAll.append(magSensorData[2, i])
-                sensor2xAll.append(magSensorData[3, i])
-                sensor2yAll.append(magSensorData[4, i])
-                sensor2zAll.append(magSensorData[5, i])
-                sensorDataSigma[0][i] = np.array(sensor1xAll).std()
-                sensorDataSigma[1][i] = np.array(sensor1yAll).std()
-                sensorDataSigma[2][i] = np.array(sensor1zAll).std()
-                sensorDataSigma[3][i] = np.array(sensor2xAll).std()
-                sensorDataSigma[4][i] = np.array(sensor2yAll).std()
-                sensorDataSigma[5][i] = np.array(sensor2zAll).std()
+                if n > 100:
+                    for sensor_i in range(6):
+                        sensorAll[sensor_i].get()
+                for sensor_i in range(6):
+                    sensorAll[sensor_i].put(magSensorData[sensor_i, i])
+                    sensorDataSigma[sensor_i][i] = np.array(sensorAll[sensor_i].queue).std()
 
         if (not offset) and n < 25:
             for i in range(6):

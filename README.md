@@ -22,3 +22,9 @@
 | output.csv         | 互补滤波算法脚本的输出结果                   |
 | readData.py        | 读取串口数据，并进行绘图                    |
 | allanFit.py        | 计算真实数据的allan方差，并进行拟合          |
+
+
+## 5. 软件安装
++ python > 3.8.3
++ 依赖包的版本要求如requirements.txt所示
++ 依赖包安装方法：`pip install -r requirements.txt`
