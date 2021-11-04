@@ -86,7 +86,7 @@ def sensorUnpack(data, offset, outputData, magBg, n, outputDataSigma):
     gyro_z = imuSensorData[5]
 
     magSensorData = np.zeros((6, 4))
-    timedata = np.zeros(4)
+    timedata = np.zeros(4, dtype='uint32')
 
     sensorDataSigma = np.zeros((6, 4), dtype='float32')
 
@@ -111,7 +111,7 @@ def sensorUnpack(data, offset, outputData, magBg, n, outputDataSigma):
             magSensorData[4, i] = np.asarray(struct.unpack('<h', data[134+i*2:136+i*2])) * magSensitivity
             magSensorData[5, i] = np.asarray(struct.unpack('<h', data[142+i*2:144+i*2])) * magSensitivity
             # 时间戳
-            timedata[i] = np.asarray(struct.unpack('<f', data[150+i*4:154+i*4]))
+            timedata[i] = np.asarray(struct.unpack('<i', data[150+i*4:154+i*4]))
 
             # 存储所有sensor的所有输出，用于计算标准差std
             if outputDataSigma:
@@ -146,14 +146,14 @@ def sensorUnpack(data, offset, outputData, magBg, n, outputDataSigma):
             outputDataSigma[:] = np.hstack(np.stack(sensorDataSigma, axis=1))
 
         # print(outputData[:])
-        # print("accel_x" ,accel_x)
-        # print("accel_y", accel_y)
-        # print("accel_z", accel_z)
+        print("accel_x" ,accel_x)
+        print("accel_y", accel_y)
+        print("accel_z", accel_z)
         # print("gyro_x" ,gyro_x)
         # print("gyro_y", gyro_y)
         # print("gyro_z", gyro_z)
         # print("magBg:\n", magBg[:])
-        # print("timedata", timedata)
+        print("timedata", timedata)
         #print("------------------------------------\n")
 
 
@@ -238,7 +238,7 @@ def send(serial_port):
 
 
 if __name__ == '__main__':
-    serial_port = serial.Serial('COM6', 230400, timeout=0.5)
+    serial_port = serial.Serial('COM15', 230400, timeout=0.5)
     snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     # snesorDict = {'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     #snesorDict = {'imu': 'LSM6DS3TR-C'}
