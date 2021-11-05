@@ -33,7 +33,8 @@ MOMENT = 2169
 g0 = 9.8
 DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM = np.array([[0, 0, 1]]).T
+EPM_ORI = np.array([[1, 0, 1]]).T    # 外部大磁体的N极朝向
+EPM_POS = np.array([[0, 0, 0.5]]).T  # 外部大磁体的坐标
 
 
 def h(state):
@@ -43,8 +44,8 @@ def h(state):
     :param EPM: 外部大磁体的朝向
     :return: 两个sensor的读数 + 胶囊z轴朝向 (9, )
     '''
-    EPMNorm = np.linalg.norm(EPM)
-    eEPM = EPM / EPMNorm
+    EPMNorm = np.linalg.norm(EPM_ORI)
+    eEPM = EPM_ORI / EPMNorm
 
     pos, q = state[0: 3], state[3: 7]
     q /= np.linalg.norm(q)
@@ -52,8 +53,8 @@ def h(state):
     emz = R[:, -1]  # 重力矢量在胶囊坐标系下的坐标
     d = np.dot(R.T, SENSORLOC * 0.5)  # 胶囊坐标系下的sensor位置矢量转换到EPM坐标系
 
-    r1 = pos.reshape(3, 1) + d
-    r2 = pos.reshape(3, 1) - d
+    r1 = pos.reshape(3, 1) + d + EPM_POS
+    r2 = pos.reshape(3, 1) - d + EPM_POS
     r1Norm = np.linalg.norm(r1)
     r2Norm = np.linalg.norm(r2)
     er1 = r1 / r1Norm
@@ -165,6 +166,7 @@ def LM(state2, output_data, n, maxIter, printBool):
             Hessian_LM = A + u * np.eye(n)  # calculating Hessian matrix in LM
             step = np.linalg.inv(Hessian_LM).dot(g)  # calculating the update step
             if np.linalg.norm(step) <= eps_step:
+                # state2[:] = state
                 stateOut(state, state2, t0, i, mse, 'threshold_step', printBool)
                 return
             newState = state + step
@@ -184,6 +186,7 @@ def LM(state2, output_data, n, maxIter, printBool):
                 us.append(u)
                 residual_memory.append(mse)
                 if stop:
+                    # state2[:] = state
                     stateOut(state, state2, t0, i, mse, 'threshold_stop or threshold_residual', printBool)
                     return
                 else:
@@ -193,7 +196,7 @@ def LM(state2, output_data, n, maxIter, printBool):
                 v *= 2
                 us.append(u)
                 residual_memory.append(mse)
-
+        state2[:] = state
         stateOut(state, state2, t0, i, mse, ' ', printBool)
 
 
@@ -211,7 +214,7 @@ def stateOut(state, state2, t0, i, mse, printStr, printBool):
         return
     print(printStr)
     timeCost = (datetime.datetime.now() - t0).total_seconds()
-    state2[:] = np.concatenate((state, np.array([MOMENT, timeCost, i])))  # 输出的结果
+    # state2[:] = np.concatenate((state, np.array([MOMENT, timeCost, i])))  # 输出的结果
     pos = np.round(state[:3], 3)
     R = q2R(state[3:7])
     emx = np.round(R[:, 0], 3)
@@ -311,10 +314,9 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
 
-def runReadData(state0, printBool, maxIter=50):
+def runReadData(printBool, maxIter=50):
     '''
     跑实际的数据来实现定位
-    :param state0: 初始值
     :param printBool: 【bool】是否打印输出
     :param maxIter: 【int】最大迭代次数
     :return:
@@ -327,6 +329,7 @@ def runReadData(state0, printBool, maxIter=50):
 
     outputData = multiprocessing.Array('f', [0] * 48)
     magBg = multiprocessing.Array('f', [0] * 6)
+    state0 = multiprocessing.Array('f', [0, 0, 0.01, 1, 0, 0, 0])
 
     send(serial_port)
     pRec = multiprocessing.dummy.Process(target=receive, args=(serial_port, outputData, magBg, True, None))
@@ -334,14 +337,18 @@ def runReadData(state0, printBool, maxIter=50):
     pRec.start()
     time.sleep(2)
 
+    pTrack3D = multiprocessing.Process(target=track3D, args=(state0, ))
+    pTrack3D.daemon = True
+    pTrack3D.start()
+
     while True:
         measureData = np.array(outputData[:9])
         LM(state0, measureData, 7, maxIter, printBool)
-        # track3D(state0)
+        time.sleep(0.1)
 
 
 if __name__ == '__main__':
-    state0 = np.array([0, 0, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
+    state0 = np.array([0, 0, 0.01, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
 
     # 仿真模拟
     # states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
@@ -349,4 +356,4 @@ if __name__ == '__main__':
     # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
 
     # 实际运行
-    runReadData(state0, printBool=True)
+    runReadData(printBool=False)

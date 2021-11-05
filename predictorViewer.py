@@ -151,7 +151,7 @@ class Custom3DAxis(gl.GLAxisItem):
 def track3D(state):
     app = QtGui.QApplication([])
     w = gl.GLViewWidget()
-    w.setWindowTitle('3d trajectory')
+    # w.setWindowTitle('3d trajectory')
     w.resize(600, 500)
     # instance of Custom3DAxis
     axis = Custom3DAxis(w, color=(0.6, 0.6, 0.2, .6))
@@ -179,6 +179,7 @@ def track3D(state):
                               glOptions='opaque')
     ArrowMesh.rotate(angle, uAxis[0], uAxis[1], uAxis[2])
     w.addItem(ArrowMesh)
+    w.setWindowTitle('position={}cm'.format(np.round(pos * 100, 1)))
     w.show()
 
     i = 1
@@ -200,6 +201,7 @@ def track3D(state):
         ArrowMesh.rotate(angle, uAxis[0], uAxis[1], uAxis[2])
         ArrowMesh.translate(*pos)
         sphereMesh.translate(*pos)
+        w.setWindowTitle('position={}cm'.format(np.round(pos, 1)))
         i += 1
 
     timer = QtCore.QTimer()
@@ -231,7 +233,7 @@ def q2ua(q):
     '''
     q0, q1, q2, q3 = q / np.linalg.norm(q)
     angle = 2 * math.acos(q0)
-    u = np.array([q1, q2, q3]) / math.sin(0.5 * angle)
+    u = np.array([q1, q2, q3]) / math.sin(0.5 * angle) if angle else np.array([0, 0, 1])
     return u, angle * 57.3
 
 def q2Euler(q):
@@ -508,12 +510,13 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
                 if data0Sigma:
                     dataSigma[dataRow].put(data0Sigma[dataRow + dataCol * sensorNum])
 
-        if i > 20:
-            n.get()
-            for q in datas:
-                q.get()
-            for qs in dataSigma:
-                qs.get()
+        if i > 200:
+            for _ in range(4):
+                n.get()
+                for q in datas:
+                    q.get()
+                for qs in dataSigma:
+                    qs.get()
         for (curve, data) in zip(curves, datas):
             curve.setData(n.queue, data.queue)
         if data0Sigma:
