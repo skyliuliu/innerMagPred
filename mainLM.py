@@ -15,9 +15,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import serial
 
-from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos
+from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos, track3D
 from readData import send, receive
-
 
 tao = 1e-3
 delta = 0.0001
@@ -34,7 +33,8 @@ MOMENT = 2169
 g0 = 9.8
 DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM = np.array([[1, 0, 0]]).T
+EPM = np.array([[0, 0, 1]]).T
+
 
 def h(state):
     '''
@@ -49,7 +49,7 @@ def h(state):
     pos, q = state[0: 3], state[3: 7]
     q /= np.linalg.norm(q)
     R = q2R(q)
-    emz = R[:, -1]     # 重力矢量在胶囊坐标系下的坐标
+    emz = R[:, -1]  # 重力矢量在胶囊坐标系下的坐标
     d = np.dot(R.T, SENSORLOC * 0.5)  # 胶囊坐标系下的sensor位置矢量转换到EPM坐标系
 
     r1 = pos.reshape(3, 1) + d
@@ -59,20 +59,18 @@ def h(state):
     er1 = r1 / r1Norm
     er2 = r2 / r2Norm
 
-    # EPM坐标系下每个sensor的B值[mGs]
-    B1 = MOMENT * np.dot(r1Norm ** (-3), np.subtract(3 * np.dot(np.inner(er1, eEPM), er1), eEPM))
-    B2 = MOMENT * np.dot(r2Norm ** (-3), np.subtract(3 * np.dot(np.inner(er2, eEPM), er2), eEPM))
+    # EPM坐标系下每个sensor的B值[Gs]
+    B1 = MOMENT * np.dot(r1Norm ** (-3), np.subtract(3 * np.dot(np.inner(er1, eEPM), er1), eEPM)) / 1000
+    B2 = MOMENT * np.dot(r2Norm ** (-3), np.subtract(3 * np.dot(np.inner(er2, eEPM), er2), eEPM)) / 1000
     # 变换到胶囊坐标系下的sensor读数
     B1s = np.dot(R, B1)
     B1s[-1] *= -1
     B2s = np.dot(R, B2)
 
-
     # 加速度计的读数
     a_s = emz * g0
 
     return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), a_s))
-
 
 
 def derive(state, param_index):
@@ -219,7 +217,7 @@ def stateOut(state, state2, t0, i, mse, printStr, printBool):
     emx = np.round(R[:, 0], 3)
     emz = np.round(R[:, -1], 3)
     B = h(state)[:6]
-    print('i={}, pos={}m, q={}, emz={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(B)))
+    print('i={}, pos={}m, q={}, emz={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(B, 2)))
 
 
 def generate_data(num_data, state, sensor_std, printBool):
@@ -231,7 +229,7 @@ def generate_data(num_data, state, sensor_std, printBool):
     :param printBool: 【bool】是否打印输出
     :return: 【np.array】模拟的B值 + 加速度计的数值, (num_data, )
     """
-    mid = h(state)    # 模拟B值数据的中间值
+    mid = h(state)  # 模拟B值数据的中间值
     sim = np.zeros(num_data)
     for j in range(num_data - 2):
         sim[j] = np.random.normal(mid[j], sensor_std, 1)
@@ -280,13 +278,14 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
 
         posTruth, emTruth = states[0][:3], q2R(states[0][3: 7])[:, -1]
         err_pos = np.linalg.norm(poss[-1] - posTruth) / np.linalg.norm(posTruth)
-        err_em = np.linalg.norm(q2R(ems[-1])[:, -1] - emTruth)   # 方向矢量本身是归一化的
+        err_em = np.linalg.norm(q2R(ems[-1])[:, -1] - emTruth)  # 方向矢量本身是归一化的
         print('pos={}: err_pos={:.0%}, err_em={:.0%}'.format(np.round(posTruth, 3), err_pos, err_em))
         residual_memory.clear()
         us.clear()
         poss.clear()
         ems.clear()
         return (err_pos, err_em)
+
 
 def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
     '''
@@ -311,6 +310,7 @@ def simErrDistributed(contourBar, sensor_std=10, pos_or_ori=1):
 
     plotErr(x, y, z, contourBar, titleName='sensor_std={}'.format(sensor_std))
 
+
 def runReadData(state0, printBool, maxIter=50):
     '''
     跑实际的数据来实现定位
@@ -319,11 +319,11 @@ def runReadData(state0, printBool, maxIter=50):
     :param maxIter: 【int】最大迭代次数
     :return:
     '''
-    serial_port = serial.Serial('COM6', 230400, timeout=0.5)
-    if serial_port.isOpen() :
+    serial_port = serial.Serial('COM7', 230400, timeout=0.5)
+    if serial_port.isOpen():
         print("open success!\n")
-    else :
-        raise RuntimeError ("open failed")
+    else:
+        raise RuntimeError("open failed")
 
     outputData = multiprocessing.Array('f', [0] * 48)
     magBg = multiprocessing.Array('f', [0] * 6)
@@ -337,11 +337,11 @@ def runReadData(state0, printBool, maxIter=50):
     while True:
         measureData = np.array(outputData[:9])
         LM(state0, measureData, 7, maxIter, printBool)
-
+        # track3D(state0)
 
 
 if __name__ == '__main__':
-    state0 = np.array([0, 0, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])   # 初始值
+    state0 = np.array([0, 0, -0.5, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
 
     # 仿真模拟
     # states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值

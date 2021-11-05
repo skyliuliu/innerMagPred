@@ -146,14 +146,14 @@ def sensorUnpack(data, offset, outputData, magBg, n, outputDataSigma):
             outputDataSigma[:] = np.hstack(np.stack(sensorDataSigma, axis=1))
 
         # print(outputData[:])
-        print("accel_x" ,accel_x)
-        print("accel_y", accel_y)
-        print("accel_z", accel_z)
+        # print("accel_x" ,accel_x)
+        # print("accel_y", accel_y)
+        # print("accel_z", accel_z)
         # print("gyro_x" ,gyro_x)
         # print("gyro_y", gyro_y)
         # print("gyro_z", gyro_z)
         # print("magBg:\n", magBg[:])
-        print("timedata", timedata)
+        # print("timedata", timedata)
         #print("------------------------------------\n")
 
 
@@ -238,7 +238,7 @@ def send(serial_port):
 
 
 if __name__ == '__main__':
-    serial_port = serial.Serial('COM15', 230400, timeout=0.5)
+    serial_port = serial.Serial('COM7', 230400, timeout=0.5)
     snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     # snesorDict = {'magSensor1': 'AK09970d', 'magSensor2': 'AK09970d'}
     #snesorDict = {'imu': 'LSM6DS3TR-C'}
