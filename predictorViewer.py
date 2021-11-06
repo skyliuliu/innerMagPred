@@ -8,6 +8,8 @@ desc: 定位结果的显示
 '''
 import copy
 import math
+import multiprocessing
+import time
 from queue import Queue
 import sys
 
@@ -149,6 +151,11 @@ class Custom3DAxis(gl.GLAxisItem):
 
 
 def track3D(state):
+    '''
+    描绘目标状态的3d轨迹
+    :param state: 【np.array】目标的状态
+    :return:
+    '''
     app = QtGui.QApplication([])
     w = gl.GLViewWidget()
     # w.setWindowTitle('3d trajectory')
@@ -436,6 +443,7 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
                 p = win.addPlot(title=sensorName)
             elif i and data0Sigma:
                 p = win.addPlot(title=sensorName + '_std')
+                win.nextRow()
             else:
                 return
             p.addLegend(offset=(1, 1))
@@ -487,14 +495,14 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
             datas.append(Queue())  # origin
             # datas.append(Queue())  # smooth
 
-    if 'magSensor1' in sensorDict.keys():
-        multiCurve('magSensor1')
-        multiCurve('magSensor2')
-        win.nextRow()
     if 'imu' in sensorDict.keys():
         multiCurve('accelerometer')
-        # win.nextRow()
         multiCurve('gyroscope')
+        win.nextRow()
+    if 'magSensor' in sensorDict.keys():
+        multiCurve('magSensor1')
+        multiCurve('magSensor2')
+        # win.nextRow()
 
     i = 1
     def update():
@@ -503,7 +511,7 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
         for _ in range(4):
             n.put(i)
             i += 1
-        sensorNum = len(data0) // 4
+        sensorNum = len(sensorDict) * 6
         for dataRow in range(sensorNum):
             for dataCol in range(4):
                 datas[dataRow].put(data0[dataRow + dataCol * sensorNum])
@@ -532,4 +540,11 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
 
 
 if __name__ == '__main__':
-    track3D(np.array([0, 0, 0.2, 1, 2, 1, 0]))
+    state = multiprocessing.Array('f', [0, 0, 0.2, 1, 2, 1, 0])
+    p = multiprocessing.dummy.Process(target=track3D, args=(state, ))
+    p.daemon = True
+    p.start()
+
+    while True:
+        state[2] += 0.01
+        time.sleep(0.04)
