@@ -248,8 +248,8 @@ if __name__ == '__main__':
 
     # def data struct
     outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
-    outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
-    # outputDataSigma = None
+    # outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+    outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
 
     # Wait a second to let the port initialize

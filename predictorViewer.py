@@ -164,7 +164,7 @@ def track3D(state):
     axis = Custom3DAxis(w, color=(0.6, 0.6, 0.2, .6))
     w.addItem(axis)
     w.opts['distance'] = 75
-    w.opts['center'] = pg.Vector(0, 0, 15)
+    w.opts['center'] = pg.Vector(0, 0, 0)
     # add xy grid
     gx = gl.GLGridItem()
     gx.setSize(x=40, y=40, z=10)
@@ -213,7 +213,7 @@ def track3D(state):
 
     timer = QtCore.QTimer()
     timer.timeout.connect(update)
-    timer.start(50)
+    timer.start(5)
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()

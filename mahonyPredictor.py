@@ -7,6 +7,12 @@ DateTime: 2021/4/14 10:40
 desc: 互补滤波算法实现类，引用Mahony提出的互补滤波算法
 '''
 import math
+import multiprocessing
+from multiprocessing.dummy import Process
+import time
+
+from readData import ReadData
+from predictorViewer import track3D
 
 #from capsulePosPredictor import CapsulePosPredictor
 
@@ -37,7 +43,7 @@ class MahonyPredictor:
             self.wy_offset += w[1]
             self.wz_offset += w[2]
             self.offset_cnt += 1
-            print("Calibrating...")
+            print("Calibrating gyroscope offset...")
             return False
         elif self.offset_cnt == self.max_time:
             self.wx_offset /= self.max_time
@@ -69,11 +75,11 @@ class MahonyPredictor:
         else:
             return
 
-    def IMUupdate(self, w, a):
+    def IMUupdate(self, a, w):
         '''
         互补滤波算法主体
         :param w: 【float】 陀螺仪输出的角速度[deg/s]
-        :param a: 【float】 加速度计输出的加速度[0.001*g0]
+        :param a: 【float】 加速度计输出的加速度[m/s^2]
         :return:  修改欧拉角
         '''
         # 消除零偏
@@ -93,7 +99,7 @@ class MahonyPredictor:
         # 互补滤波核心过程
         # 1、对加速度数据进行归一化
         aNorm = math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
-        ax, ay, az = (ai / aNorm for ai in a)
+        ax, ay, az = (ai / aNorm for ai in a) if aNorm else (0, 0, 1)
 
         # 2、载体坐标转为世界坐标
         vx = 2 * (self.q[1] * self.q[3] - self.q[0] * self.q[2])
@@ -137,7 +143,35 @@ class MahonyPredictor:
             self.roll = math.asin(2 * self.q[0] * self.q[2] - 2 * self.q[3] * self.q[1])
             self.yaw = math.atan2(2 * self.q[0] * self.q[3] + 2 * self.q[1] * self.q[2], 1 - 2 * self.q[2] * self.q[2] - 2 * self.q[3] * self.q[3])
 
+def main():
+    snesorDict = {'imu': 'LSM6DS3TR-C'}
+    readObj = ReadData(snesorDict)
+    # outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+    outputDataSigma = None
+    magBg = multiprocessing.Array('f', [0] * 6)
+    outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+
+    state = multiprocessing.Array('f', [0, 0, 0, 1, 0, 0, 0])
+
+    # Wait a second to let the port initialize
+    readObj.send()
+    # receive data in a new process
+    pRec = Process(target=readObj.receive, args=(outputData, magBg, outputDataSigma))
+    pRec.daemon = True
+    pRec.start()
+
+    pTrack3D = multiprocessing.Process(target=track3D, args=(state,))
+    pTrack3D.daemon = True
+    pTrack3D.start()
+
+    mp = MahonyPredictor(q=state[3:], Kp=100, Ki=0.01, dt=0.002)
+    while True:
+        # print("a={}, w={}".format(np.round(outputData[:3], 2), np.round(outputData[3:6], 2)))
+        mp.getGyroOffset(outputData[3:6])
+        mp.IMUupdate(outputData[:3], outputData[3:6])
+        state[3:] = mp.q
+        time.sleep(0.08)
 
 
-
-
+if __name__ == '__main__':
+    main()
