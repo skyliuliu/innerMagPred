@@ -9,14 +9,14 @@ desc:使用LM非线性优化+互补滤波算法进行内置式磁定位
 import datetime
 import math
 import multiprocessing
+from multiprocessing.dummy import Process
 import time
 
 import numpy as np
 import matplotlib.pyplot as plt
-import serial
 
 from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos, track3D
-from readData import send, receive
+from readData import ReadData
 
 tao = 1e-3
 delta = 0.0001
@@ -41,7 +41,6 @@ def h(state):
     '''
     以外部大磁体为参考系，得出胶囊内sensor的读数
     :param state: 胶囊的位姿状态
-    :param EPM: 外部大磁体的朝向
     :return: 两个sensor的读数 + 胶囊z轴朝向 (9, )
     '''
     EPMNorm = np.linalg.norm(EPM_ORI)
@@ -71,7 +70,37 @@ def h(state):
     # 加速度计的读数
     a_s = emz * g0
 
-    return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), a_s))
+    return np.concatenate((a_s, B1s.reshape(-1), B2s.reshape(-1)))
+
+
+def h0(state):
+    '''
+    胶囊只有内一个磁sensor
+    :param state: 胶囊的位姿状态
+    :param EPM: 外部大磁体的朝向
+    :return: 胶囊内imu+磁传感器的读数
+    '''
+    EPMNorm = np.linalg.norm(EPM_ORI)
+    eEPM = EPM_ORI / EPMNorm
+
+    pos, q = state[0: 3], state[3: 7]
+    q /= np.linalg.norm(q)
+    R = q2R(q)
+    emz = R[:, -1]  # 重力矢量在胶囊坐标系下的坐标
+
+    r = pos.reshape(3, 1) + EPM_POS
+    rNorm = np.linalg.norm(r)
+    er = r / rNorm
+
+    # EPM坐标系下sensor的B值[Gs]
+    B = MOMENT * np.dot(rNorm ** (-3), np.subtract(3 * np.dot(np.inner(er, eEPM), er), eEPM)) / 1000
+    # 变换到胶囊坐标系下的sensor读数
+    Bs = np.dot(R, B)
+
+    # 加速度计的读数
+    a_s = emz * g0
+
+    return np.concatenate((a_s, Bs.reshape(-1)))
 
 
 def derive(state, param_index):
@@ -89,8 +118,8 @@ def derive(state, param_index):
         delta = 0.001
     state1[param_index] += delta
     state2[param_index] -= delta
-    data_est_output1 = h(state1)
-    data_est_output2 = h(state2)
+    data_est_output1 = h0(state1)
+    data_est_output2 = h0(state2)
     return 0.5 * (data_est_output1 - data_est_output2) / delta
 
 
@@ -115,7 +144,7 @@ def residual(state, output_data):
     :param output_data: 【np.array】观测量 (m, )
     :return:【np.array】 residual (m, )
     """
-    data_est_output = h(state[:7])
+    data_est_output = h0(state[:7])
     residual = output_data - data_est_output
     return residual
 
@@ -321,18 +350,15 @@ def runReadData(printBool, maxIter=50):
     :param maxIter: 【int】最大迭代次数
     :return:
     '''
-    serial_port = serial.Serial('COM7', 230400, timeout=0.5)
-    if serial_port.isOpen():
-        print("open success!\n")
-    else:
-        raise RuntimeError("open failed")
+    snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
+    readObj = ReadData(snesorDict)    # 创建读取数据的对象
 
-    outputData = multiprocessing.Array('f', [0] * 48)
+    outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     magBg = multiprocessing.Array('f', [0] * 6)
     state0 = multiprocessing.Array('f', [0, 0, 0.01, 1, 0, 0, 0])
 
-    send(serial_port)
-    pRec = multiprocessing.dummy.Process(target=receive, args=(serial_port, outputData, magBg, True, None))
+    readObj.send()
+    pRec = Process(target=readObj.receive, args=(outputData, magBg, None))
     # pRec.daemon = True
     pRec.start()
     time.sleep(2)
@@ -342,7 +368,7 @@ def runReadData(printBool, maxIter=50):
     pTrack3D.start()
 
     while True:
-        measureData = np.array(outputData[:9])
+        measureData = np.concatenate((outputData[:3], outputData[9: 12]))
         LM(state0, measureData, 7, maxIter, printBool)
         time.sleep(0.1)
 

@@ -213,7 +213,7 @@ def track3D(state):
 
     timer = QtCore.QTimer()
     timer.timeout.connect(update)
-    timer.start(5)
+    timer.start(50)
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()

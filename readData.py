@@ -241,9 +241,9 @@ class ReadData:
 
 
 if __name__ == '__main__':
-    # snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
+    snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
     # snesorDict = {'magSensor': 'AK09970d'}
-    snesorDict = {'imu': 'LSM6DS3TR-C'}
+    # snesorDict = {'imu': 'LSM6DS3TR-C'}
     readObj = ReadData(snesorDict)    # 创建读取数据的对象
 
     # def data struct
