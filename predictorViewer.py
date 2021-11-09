@@ -398,11 +398,12 @@ def plotErr(x, y, z, contourBar, titleName):
     plt.show()
 
 
-def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
+def plotSensor(sensorDict, data0, outputDataSmooth, data0Sigma, dataSmooth=None):
     '''
     对sensor读取的结果进行绘图
     :param sensorDict: 【dict】sensor名字的列表
     :param data0:  【Array】sensor原始数据的数组
+    :param outputDataSmooth: 【Array】 对磁传感器数据的平滑
     :param data0Sigma: 【Array】sensor原始数据标准差的数组
     :param dataSmooth: 【Array】平滑过的sensor原始数据
     :return:
@@ -484,25 +485,26 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
 
         for axis in ['x', 'y', 'z']:
             p = win.addPlot(name=sensorName, title=sensorName + '_' + axis)
-            # p.addLegend()
+            p.addLegend()
             p.setLabel('left', label, units=units)
             p.setLabel('bottom', 'points', units='1')
             p.showGrid(x=True, y=True)
-            cOrigin = p.plot(pen=colours[axis])
-            # cPredict = p.plot(pen='g', name='Smooth')
+            cOrigin = p.plot(pen=colours[axis], name='origin')
+            cPredict = p.plot(pen='w', name='Smooth')
             curves.append(cOrigin)
-            # curves.append(cPredict)
+            curves.append(cPredict)
             datas.append(Queue())  # origin
-            # datas.append(Queue())  # smooth
+            datas.append(Queue())  # smooth
 
     if 'imu' in sensorDict.keys():
         multiCurve('accelerometer')
         multiCurve('gyroscope')
         win.nextRow()
     if 'magSensor' in sensorDict.keys():
-        multiCurve('magSensor1')
-        multiCurve('magSensor2')
-        # win.nextRow()
+        singleCurve('magSensor1')
+        # multiCurve('magSensor2')
+        win.nextRow()
+        singleCurve('magSensor2')
 
     i = 1
     def update():
@@ -514,9 +516,11 @@ def plotSensor(sensorDict, data0, data0Sigma, dataSmooth=None):
         sensorNum = len(sensorDict) * 6
         for dataRow in range(sensorNum):
             for dataCol in range(4):
-                datas[dataRow].put(data0[dataRow + dataCol * sensorNum])
+                datas[dataRow*2].put(data0[dataRow + dataCol * sensorNum])
                 if data0Sigma:
                     dataSigma[dataRow].put(data0Sigma[dataRow + dataCol * sensorNum])
+                if outputDataSmooth:
+                    datas[dataRow*2+1].put(outputDataSmooth[dataRow + dataCol * sensorNum])
 
         if i > 200:
             for _ in range(4):

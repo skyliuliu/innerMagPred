@@ -33,7 +33,7 @@ MOMENT = 2169
 g0 = 9.8
 DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM_ORI = np.array([[1, 0, 1]]).T    # 外部大磁体的N极朝向
+EPM_ORI = np.array([[0, 0, -1]]).T    # 外部大磁体的N极朝向
 EPM_POS = np.array([[0, 0, 0.5]]).T  # 外部大磁体的坐标
 
 
@@ -96,6 +96,7 @@ def h0(state):
     B = MOMENT * np.dot(rNorm ** (-3), np.subtract(3 * np.dot(np.inner(er, eEPM), er), eEPM)) / 1000
     # 变换到胶囊坐标系下的sensor读数
     Bs = np.dot(R, B)
+    Bs[-1] *= -1
 
     # 加速度计的读数
     a_s = emz * g0
@@ -368,7 +369,7 @@ def runReadData(printBool, maxIter=50):
     pTrack3D.start()
 
     while True:
-        measureData = np.concatenate((outputData[:3], outputData[9: 12]))
+        measureData = np.concatenate((outputData[:3], outputData[6: 9]))
         LM(state0, measureData, 7, maxIter, printBool)
         time.sleep(0.1)
 

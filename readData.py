@@ -22,6 +22,7 @@ from queue import Queue
 import numpy as np
 import serial
 import serial.tools.list_ports
+from filterpy.kalman import FixedLagSmoother as FLS
 
 from predictorViewer import plotSensor
 
@@ -35,7 +36,7 @@ class ReadData:
     # 重力加速度【m/s^2】
     CONST_g0 = 9.8
     # AKMsensor的灵敏度【mGs/LSB】
-    magSensitivity = 0.011
+    magSensitivity = 0.031
 
     def __init__(self, snesorDict):
         # 串口端口号
@@ -62,6 +63,13 @@ class ReadData:
         self.n = 0
         # 是否读取本地保存的背景磁场
         self.offset = True
+        # 用于平滑磁传感器的数据
+        self.magSmooth = np.zeros((6, 4), dtype='float32')
+        # 固定区间平滑器,暂时只对磁传感器进行平滑
+        self.fls = FLS(dim_x=6, dim_z=6, N=4)
+        self.fls.P = 1
+        self.fls.R = 0.05
+        self.fls.Q = 0.01
 
     def PIOS_CRC_updateByte(self, crc, data) :
         crc_table = [
@@ -91,7 +99,7 @@ class ReadData:
         return val
 
 
-    def sensorUnpack(self, data, outputData, magBg, outputDataSigma):
+    def sensorUnpack(self, data, outputData, outputDataSmooth, magBg, outputDataSigma):
         '''
         对读到的原始数据进行解包处理
         :param data:
@@ -135,6 +143,10 @@ class ReadData:
                             self.sensorDataSigma[sensor_i][i] = np.array(self.sensorAll[sensor_i].queue).std()
                             self.sensorDataSigma[sensor_i + 6][i] = np.array(self.sensorAll[sensor_i + 6].queue).std()
 
+                # 对磁传感器的读数进行平滑
+                self.fls.smooth(self.magSensorData[:, i])
+                self.magSmooth[:, i] = np.array(self.fls.xSmooth[-1])[0, :]
+
             if (not self.offset) and self.n < 25:
                 for i in range(6):
                     magBg[i] =self.magSensorData[i].sum() + magBg[i]
@@ -153,18 +165,23 @@ class ReadData:
             else:
                 for i in range(6):
                     self.magSensorData[i] = self.magSensorData[i] - magBg[i]
+                    self.magSmooth[i] = self.magSmooth[i] - magBg[i]
 
             if 'magSensor' not in self.sensorDict.keys():
                 outputData[:] = np.hstack(np.stack(self.imuSensorData, axis=1))
             elif 'imu' not in self.sensorDict.keys():
                 outputData[:] = np.hstack(np.stack(self.magSensorData, axis=1))
+                outputDataSmooth[:] = np.hstack(np.stack(self.magSmooth, axis=1))
             else:
                 outputData[:] = np.hstack(np.stack(np.vstack((self.imuSensorData, self.magSensorData)), axis=1))
+                outputDataSmooth[:] = np.hstack(np.stack(self.magSmooth, axis=1))
             if outputDataSigma:
                 outputDataSigma[:] = np.hstack(np.stack(self.sensorDataSigma, axis=1))
+            # print("outputData={}".format(np.round(outputData, 2)))
+            # print("outputDataSmooth={}".format(np.round(outputDataSmooth, 2)))
 
 
-    def receive(self, outputData, magBg, outputDataSigma=None):
+    def receive(self, outputData, outputDataSmooth, magBg, outputDataSigma=None):
         '''
         读串口
         :param outputDataSigma: 输出数据的标准差
@@ -209,7 +226,7 @@ class ReadData:
                             crc8Val = dataBuff[-1]
                             decData = binascii.b2a_hex(dataBuff).decode('utf-8')
 
-                            self.sensorUnpack(dataBuff, outputData, magBg, outputDataSigma)
+                            self.sensorUnpack(dataBuff, outputData, outputDataSmooth, magBg, outputDataSigma)
                             self.n += 1
 
 
@@ -241,13 +258,14 @@ class ReadData:
 
 
 if __name__ == '__main__':
-    snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
-    # snesorDict = {'magSensor': 'AK09970d'}
+    # snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
+    snesorDict = {'magSensor': 'AK09970d'}
     # snesorDict = {'imu': 'LSM6DS3TR-C'}
     readObj = ReadData(snesorDict)    # 创建读取数据的对象
 
     # def data struct
     outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+    outputDataSmooth = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     # outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
@@ -255,9 +273,9 @@ if __name__ == '__main__':
     # Wait a second to let the port initialize
     readObj.send()
     # receive data in a new process
-    pRec = Process(target=readObj.receive, args=(outputData, magBg, outputDataSigma))
+    pRec = Process(target=readObj.receive, args=(outputData, outputDataSmooth, magBg, outputDataSigma))
     pRec.daemon = True
     pRec.start()
-
+    time.sleep(1)
     # plot sensor data
-    plotSensor(snesorDict, outputData, outputDataSigma)
+    plotSensor(snesorDict, outputData, outputDataSmooth, outputDataSigma)
