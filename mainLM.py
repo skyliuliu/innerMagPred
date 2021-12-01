@@ -33,7 +33,7 @@ MOMENT = 2169
 g0 = 9.8
 DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM_ORI = np.array([[0, 0, -1]]).T    # 外部大磁体的N极朝向
+EPM_ORI = np.array([[1, 0, 0]]).T    # 外部大磁体的N极朝向
 EPM_POS = np.array([[0, 0, 0.5]]).T  # 外部大磁体的坐标
 
 
@@ -226,7 +226,7 @@ def LM(state2, output_data, n, maxIter, printBool):
                 v *= 2
                 us.append(u)
                 residual_memory.append(mse)
-        state2[:] = state
+        # state2[:] = state
         stateOut(state, state2, t0, i, mse, ' ', printBool)
 
 
@@ -244,12 +244,12 @@ def stateOut(state, state2, t0, i, mse, printStr, printBool):
         return
     print(printStr)
     timeCost = (datetime.datetime.now() - t0).total_seconds()
-    # state2[:] = np.concatenate((state, np.array([MOMENT, timeCost, i])))  # 输出的结果
+    state2[:] = np.concatenate((state, np.array([MOMENT, timeCost, i])))  # 输出的结果
     pos = np.round(state[:3], 3)
     R = q2R(state[3:7])
     emx = np.round(R[:, 0], 3)
     emz = np.round(R[:, -1], 3)
-    B = h(state)[:6]
+    B = h0(state)[:6]
     print('i={}, pos={}m, q={}, emz={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(B, 2)))
 
 
@@ -262,17 +262,16 @@ def generate_data(num_data, state, sensor_std, printBool):
     :param printBool: 【bool】是否打印输出
     :return: 【np.array】模拟的B值 + 加速度计的数值, (num_data, )
     """
-    mid = h(state)  # 模拟B值数据的中间值
+    mid = h0(state)  # 模拟B值数据的中间值
     sim = np.zeros(num_data)
-    for j in range(num_data - 2):
-        sim[j] = np.random.normal(mid[j], sensor_std, 1)
-    for k in range(num_data - 2, num_data):
-        sim[k] = np.random.normal(mid[k], 5, 1)
+    for j in range(num_data - 3):
+        sim[j] = np.random.normal(mid[j], 0.01, 1)
+    for k in range(num_data - 3, num_data):
+        sim[k] = np.random.normal(mid[k], sensor_std, 1)
 
     if printBool:
-        print('Bmid={}'.format(np.round(mid[:6], 0)))
-        print('Bsim={}'.format(np.round(sim[:6], 0)))
-        print('truth: pos={}m, pitch={}, roll={}\n'.format(state[:3], np.round(sim[-2], 2), np.round(sim[-1], 2)))
+        print('sensor_mid={}'.format(np.round(mid[:6], 0)))
+        print('sensor_sim={}'.format(np.round(sim[:6], 0)))
     return sim
 
 
@@ -288,7 +287,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
     :param maxIter: 【int】最大迭代次数
     :return: 【tuple】 位置[x, y, z]和姿态ez的误差百分比
     '''
-    m, n = 9, 7
+    m, n = 6, 7
     for i in range(1):
         # run
         output_data = generate_data(m, states[i], sensor_std, printBool)
@@ -375,12 +374,13 @@ def runReadData(printBool, maxIter=50):
 
 
 if __name__ == '__main__':
-    state0 = np.array([0, 0, 0.01, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
+    state0 = np.array([0.1, 0, 0.01, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
 
     # 仿真模拟
-    # states = [np.array([0, -0.1, -0.4, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    # err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
+    states = [np.array([0.1, -0.1, 0.1, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
+    # states = [np.array([0, -0.1, 0, 1, 0, 0, 0])]  # 真实值
+    err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
     # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
 
     # 实际运行
-    runReadData(printBool=False)
+    # runReadData(printBool=False)
