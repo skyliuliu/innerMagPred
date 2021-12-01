@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 
 from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos, track3D
 from readData import ReadData
+from mahonyPredictor import MahonyPredictor
+
 
 tao = 1e-3
 delta = 0.0001
@@ -67,10 +69,10 @@ def h(state):
     B1s[-1] *= -1
     B2s = np.dot(R, B2)
 
-    # 加速度计的读数
-    a_s = emz * g0
+    # 计算欧拉角
+    pitch, roll, _ = q2Euler(q)
 
-    return np.concatenate((a_s, B1s.reshape(-1), B2s.reshape(-1)))
+    return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), [pitch, roll]))
 
 
 def h0(state):
@@ -98,10 +100,10 @@ def h0(state):
     Bs = np.dot(R, B)
     Bs[-1] *= -1
 
-    # 加速度计的读数
-    a_s = emz * g0
+    # 计算欧拉角
+    pitch, roll, _ = q2Euler(q)
 
-    return np.concatenate((a_s, Bs.reshape(-1)))
+    return np.concatenate((Bs.reshape(-1), [pitch, roll]))
 
 
 def derive(state, param_index):
@@ -264,9 +266,9 @@ def generate_data(num_data, state, sensor_std, printBool):
     """
     mid = h0(state)  # 模拟B值数据的中间值
     sim = np.zeros(num_data)
-    for j in range(num_data - 3):
+    for j in range(3):
         sim[j] = np.random.normal(mid[j], 0.01, 1)
-    for k in range(num_data - 3, num_data):
+    for k in range(3, num_data):
         sim[k] = np.random.normal(mid[k], sensor_std, 1)
 
     if printBool:
@@ -354,11 +356,12 @@ def runReadData(printBool, maxIter=50):
     readObj = ReadData(snesorDict)    # 创建读取数据的对象
 
     outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+    outputDataSmooth = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     magBg = multiprocessing.Array('f', [0] * 6)
     state0 = multiprocessing.Array('f', [0, 0, 0.01, 1, 0, 0, 0])
 
     readObj.send()
-    pRec = Process(target=readObj.receive, args=(outputData, magBg, None))
+    pRec = Process(target=readObj.receive, args=(outputData, outputDataSmooth, magBg, None))
     # pRec.daemon = True
     pRec.start()
     time.sleep(2)
@@ -367,8 +370,12 @@ def runReadData(printBool, maxIter=50):
     pTrack3D.daemon = True
     pTrack3D.start()
 
+    mp = MahonyPredictor(q=state0[3:], Kp=100, Ki=0.01, dt=0.002)
     while True:
-        measureData = np.concatenate((outputData[:3], outputData[6: 9]))
+        mp.getGyroOffset(outputData[3:6])
+        mp.IMUupdate(outputData[:3], outputData[3:6])
+        pitch, roll = mp.pitch * 57.3, mp.roll * 57.3
+        measureData = np.concatenate((outputData[6: 9], [pitch, roll]))
         LM(state0, measureData, 7, maxIter, printBool)
         time.sleep(0.1)
 

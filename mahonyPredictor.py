@@ -146,6 +146,7 @@ class MahonyPredictor:
 def main():
     snesorDict = {'imu': 'LSM6DS3TR-C'}
     readObj = ReadData(snesorDict)
+    outputDataSmooth = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     # outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
@@ -156,7 +157,7 @@ def main():
     # Wait a second to let the port initialize
     readObj.send()
     # receive data in a new process
-    pRec = Process(target=readObj.receive, args=(outputData, magBg, outputDataSigma))
+    pRec = Process(target=readObj.receive, args=(outputData, outputDataSmooth, magBg, outputDataSigma))
     pRec.daemon = True
     pRec.start()
 
@@ -166,7 +167,7 @@ def main():
 
     mp = MahonyPredictor(q=state[3:], Kp=100, Ki=0.01, dt=0.002)
     while True:
-        # print("a={}, w={}".format(np.round(outputData[:3], 2), np.round(outputData[3:6], 2)))
+        print("pitch={:.0f}, roll={:.0f}".format(mp.pitch * 57.3, mp.roll * 57.3))
         mp.getGyroOffset(outputData[3:6])
         mp.IMUupdate(outputData[:3], outputData[3:6])
         state[3:] = mp.q
