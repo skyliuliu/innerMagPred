@@ -17,8 +17,6 @@ import matplotlib.pyplot as plt
 
 from predictorViewer import q2R, q2Euler, plotErr, plotLM, plotPos, track3D
 from readData import ReadData
-from mahonyPredictor import MahonyPredictor
-
 
 tao = 1e-3
 delta = 0.0001
@@ -69,10 +67,10 @@ def h(state):
     B1s[-1] *= -1
     B2s = np.dot(R, B2)
 
-    # 计算欧拉角
-    pitch, roll, _ = q2Euler(q)
+    # 加速度计的读数
+    a_s = emz * g0
 
-    return np.concatenate((B1s.reshape(-1), B2s.reshape(-1), [pitch, roll]))
+    return np.concatenate((a_s, B1s.reshape(-1), B2s.reshape(-1)))
 
 
 def h0(state):
@@ -100,10 +98,10 @@ def h0(state):
     Bs = np.dot(R, B)
     Bs[-1] *= -1
 
-    # 计算欧拉角
-    pitch, roll, _ = q2Euler(q)
+    # 加速度计的读数
+    a_s = emz * g0
 
-    return np.concatenate((Bs.reshape(-1), [pitch, roll]))
+    return np.concatenate((a_s, Bs.reshape(-1)))
 
 
 def derive(state, param_index):
@@ -148,8 +146,8 @@ def residual(state, output_data):
     :return:【np.array】 residual (m, )
     """
     data_est_output = h0(state[:7])
-    residual = output_data - data_est_output
-    return residual
+    res = output_data - data_est_output
+    return res
 
 
 def get_init_u(A, tao):
@@ -251,8 +249,8 @@ def stateOut(state, state2, t0, i, mse, printStr, printBool):
     R = q2R(state[3:7])
     emx = np.round(R[:, 0], 3)
     emz = np.round(R[:, -1], 3)
-    B = h0(state)[:6]
-    print('i={}, pos={}m, q={}, emz={}, B={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(B, 2)))
+    sensor_pred = h0(state)[:6]
+    print('i={}, pos={}m, q={}, emz={}, sensor_pred={}'.format(i, pos, np.round(state[3:7], 3), emz, np.round(sensor_pred, 2)))
 
 
 def generate_data(num_data, state, sensor_std, printBool):
@@ -266,9 +264,9 @@ def generate_data(num_data, state, sensor_std, printBool):
     """
     mid = h0(state)  # 模拟B值数据的中间值
     sim = np.zeros(num_data)
-    for j in range(3):
+    for j in range(num_data - 3):
         sim[j] = np.random.normal(mid[j], 0.01, 1)
-    for k in range(3, num_data):
+    for k in range(num_data - 3, num_data):
         sim[k] = np.random.normal(mid[k], sensor_std, 1)
 
     if printBool:
@@ -356,12 +354,11 @@ def runReadData(printBool, maxIter=50):
     readObj = ReadData(snesorDict)    # 创建读取数据的对象
 
     outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
-    outputDataSmooth = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
     magBg = multiprocessing.Array('f', [0] * 6)
     state0 = multiprocessing.Array('f', [0, 0, 0.01, 1, 0, 0, 0])
 
     readObj.send()
-    pRec = Process(target=readObj.receive, args=(outputData, outputDataSmooth, magBg, None))
+    pRec = Process(target=readObj.receive, args=(outputData, magBg, None))
     # pRec.daemon = True
     pRec.start()
     time.sleep(2)
@@ -370,23 +367,19 @@ def runReadData(printBool, maxIter=50):
     pTrack3D.daemon = True
     pTrack3D.start()
 
-    mp = MahonyPredictor(q=state0[3:], Kp=100, Ki=0.01, dt=0.002)
     while True:
-        mp.getGyroOffset(outputData[3:6])
-        mp.IMUupdate(outputData[:3], outputData[3:6])
-        pitch, roll = mp.pitch * 57.3, mp.roll * 57.3
-        measureData = np.concatenate((outputData[6: 9], [pitch, roll]))
+        measureData = np.concatenate((outputData[:3], outputData[6: 9]))
         LM(state0, measureData, 7, maxIter, printBool)
         time.sleep(0.1)
 
 
 if __name__ == '__main__':
-    state0 = np.array([0.1, 0, 0.01, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
+    state0 = np.array([0, 0, 0.01, 0, 1, 1, 0, MOMENT, 0, 0])  # 初始值
 
     # 仿真模拟
-    states = [np.array([0.1, -0.1, 0.1, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    # states = [np.array([0, -0.1, 0, 1, 0, 0, 0])]  # 真实值
-    err = sim(states, state0, sensor_std=10, plotBool=False, plotType=(1, 2), printBool=True)
+    # states = [np.array([0.2, -0.1, 0.2, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
+    states = [np.array([0, 0.2, 0.1, 1, 2, 3, 0])]  # 真实值
+    err = sim(states, state0, sensor_std=0.1, plotBool=False, plotType=(1, 2), printBool=True)
     # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
 
     # 实际运行
