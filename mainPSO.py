@@ -93,11 +93,11 @@ class PSO:
 
             fitness.append(self.gCost)
             pos = self.gbest[:3]
-            ez = q2R(self.gbest[3:7])[-1]
+            ez = q2R(self.gbest[3:7])[:,-1]
             print('i={}: pos={}, ez={}, cost={}'.format(it + 1, np.round(pos, 3), np.round(ez, 3), self.gCost))
 
 def sim():
-    state = np.array([0.2, 0.1 , 0.15, 1, 2, 3, 0])
+    state = np.array([0, -0.05 , 0.15, 1, 2, 3, 0])
     simData = generate_data(6, state, 0.1, True)
 
     pso = PSO()
