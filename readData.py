@@ -171,10 +171,12 @@ class ReadData:
                 outputData[:] = np.hstack(np.stack(self.imuSensorData, axis=1))
             elif 'imu' not in self.sensorDict.keys():
                 outputData[:] = np.hstack(np.stack(self.magSensorData, axis=1))
-                outputDataSmooth[:] = np.hstack(np.stack(self.magSmooth, axis=1))
+                if outputDataSmooth:
+                    outputDataSmooth[:] = np.hstack(np.stack(self.magSmooth, axis=1))
             else:
                 outputData[:] = np.hstack(np.stack(np.vstack((self.imuSensorData, self.magSensorData)), axis=1))
-                outputDataSmooth[:] = np.hstack(np.stack(self.magSmooth, axis=1))
+                if outputDataSmooth:
+                    outputDataSmooth[:] = np.hstack(np.stack(self.magSmooth, axis=1))
             if outputDataSigma:
                 outputDataSigma[:] = np.hstack(np.stack(self.sensorDataSigma, axis=1))
             # print("outputData={}".format(np.round(outputData, 2)))
@@ -258,6 +260,7 @@ class ReadData:
 
 
 if __name__ == '__main__':
+    # 不能同时显示IMU和magSensor的数值
     # snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
     snesorDict = {'magSensor': 'AK09970d'}
     # snesorDict = {'imu': 'LSM6DS3TR-C'}
@@ -265,13 +268,18 @@ if __name__ == '__main__':
 
     # def data struct
     outputData = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
-    outputDataSmooth = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
-    # outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
-    outputDataSigma = None
     magBg = multiprocessing.Array('f', [0] * 6)
 
+    # 平滑曲线只能在singleCurve模式下绘图，且只有magSensor有
+    outputDataSmooth = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+    # outputDataSmooth = None
+
+    # 标准差曲线只能在multiCurve模式下绘图
+    # outputDataSigma = multiprocessing.Array('f', [0] * len(snesorDict) * 24)
+    outputDataSigma = None
+
     # Wait a second to let the port initialize
-    readObj.send()
+    # readObj.send()
     # receive data in a new process
     pRec = Process(target=readObj.receive, args=(outputData, outputDataSmooth, magBg, outputDataSigma))
     pRec.daemon = True

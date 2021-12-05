@@ -502,9 +502,10 @@ def plotSensor(sensorDict, data0, outputDataSmooth, data0Sigma, dataSmooth=None)
         win.nextRow()
     if 'magSensor' in sensorDict.keys():
         singleCurve('magSensor1')
-        # multiCurve('magSensor2')
+        # multiCurve('magSensor1')
         win.nextRow()
         singleCurve('magSensor2')
+        # multiCurve('magSensor2')
 
     i = 1
     def update():
@@ -516,11 +517,13 @@ def plotSensor(sensorDict, data0, outputDataSmooth, data0Sigma, dataSmooth=None)
         sensorNum = len(sensorDict) * 6
         for dataRow in range(sensorNum):
             for dataCol in range(4):
-                datas[dataRow*2].put(data0[dataRow + dataCol * sensorNum])
+                datas[dataRow*2].put(data0[dataRow + dataCol * sensorNum])     # 用于singleCurve模式
+                # datas[dataRow].put(data0[dataRow + dataCol * sensorNum])     # 用于multiCurve模式
                 if data0Sigma:
                     dataSigma[dataRow].put(data0Sigma[dataRow + dataCol * sensorNum])
                 if outputDataSmooth:
-                    datas[dataRow*2+1].put(outputDataSmooth[dataRow + dataCol * sensorNum])
+                    datas[dataRow*2+1].put(outputDataSmooth[dataRow + dataCol * sensorNum])    # 用于singleCurve模式
+                    # datas[dataRow].put(outputDataSmooth[dataRow + dataCol * sensorNum])    # 用于multiCurve模式
 
         if i > 200:
             for _ in range(4):
