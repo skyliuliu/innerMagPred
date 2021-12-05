@@ -74,7 +74,7 @@ class MahonyPredictor:
         else:
             return
 
-    def IMUupdate(self, a, w, b=None):
+    def IMUupdate(self, a, w, m=None):
         '''
         互补滤波算法主体
         :param w: 【float】 陀螺仪输出的角速度[deg/s]
@@ -91,9 +91,17 @@ class MahonyPredictor:
         # 自适应调节PI
         #self.autoPI_byGyro(w)
 
-        # 先减小角速度计零偏
-        # GyroErrorPredictor.EKF_updateIMU(w, a)
-        # todo
+        # 四元数乘积替换
+        q0q0 = self.q[0] * self.q[0]
+        q1q1 = self.q[1] * self.q[1]
+        q2q2 = self.q[2] * self.q[2]
+        q3q3 = self.q[3] * self.q[3]
+        q0q1 = self.q[0] * self.q[1]
+        q0q2 = self.q[0] * self.q[2]
+        q0q3 = self.q[0] * self.q[3]
+        q1q2 = self.q[1] * self.q[2]
+        q1q3 = self.q[1] * self.q[3]
+        q2q3 = self.q[2] * self.q[3]
 
         # 互补滤波核心过程
         # 1、对加速度数据进行归一化
@@ -102,27 +110,34 @@ class MahonyPredictor:
 
         # 2、载体坐标转为世界坐标
         # 重力加速度在载体坐标系下的方向矢量
-        vx = 2 * (self.q[1] * self.q[3] - self.q[0] * self.q[2])
-        vy = 2 * (self.q[0] * self.q[1] + self.q[2] * self.q[3])
-        vz = self.q[0] * self.q[0] - self.q[1] * self.q[1] -self.q[2] * self.q[2] + self.q[3] * self.q[3]
-
+        vx = 2 * (q1q3 - q0q2)
+        vy = 2 * (q0q1 + q2q3)
+        vz = 1 - 2 * q1q1 - 2 * q2q2
 
 
         # 3、在机体坐标系下做向量叉积得到补偿数据
-        if b:
-            bNorm = math.sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2])
-            bx = -b[0] / bNorm if bNorm else 1
-            by = b[1] / bNorm if bNorm else 0
-            bz = -b[2] / bNorm if bNorm else 0
+        if m:
+            bNorm = math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2])
+            mx = -m[0] / bNorm if bNorm else 1
+            my = m[1] / bNorm if bNorm else 0
+            mz = -m[2] / bNorm if bNorm else 0
 
-            # 磁场北极方向在载体坐标系下的方向矢量
-            nx = bx * (0.5 - self.q[2] * self.q[2] - self.q[3] * self.q[3]) + bz * (self.q[1] * self.q[3] - self.q[0] * self.q[2])
-            ny = bx * (self.q[1] * self.q[2] - self.q[0] * self.q[3]) + bz * (self.q[0] * self.q[1] + self.q[2] * self.q[3])
-            nz = bx * (self.q[0] * self.q[2] + self.q[1] * self.q[3]) + bz * (0.5 - self.q[1] * self.q[1] - self.q[2] * self.q[2])
+            # 磁场在参考坐标系下的表示
+            hx = 2 * mx * (0.5 - q2q2 - q3q3) + 2 * my * (q1q2 - q0q3) + 2 * mz * (q1q3 + q0q2)
+            hy = 2 * mx * (q1q2 + q0q3) + 2 * my * (0.5 - q1q1 - q3q3) + 2 * mz * (q1q3 - q0q2)
+            hz = 2 * mx * (q1q3 - q0q2) + 2 * my * (q2q3 + q0q1) + 2 * mz * (0.5 - q1q1 - q2q2)
+            # 投影到XZ平面
+            bx = math.sqrt(hx * hx + hy * hy)
+            bz = hz
 
-            ex = ay * vz - az * vy + by * nz - bz * ny
-            ey = az * vx - ax * vz + bz * nx - bx * nz
-            ez = ax * vy - ay * vx + bx * ny - by * nx
+            # 磁场在载体坐标系下的表示
+            nx = bx * (1 - 2 * q2q2 - 2 * q3q3) + 2 *bz * (q1q3 - q0q2)
+            ny = 2 * bx * (q1q2 - q0q3) + bz * (q0q1 + q2q3)
+            nz = 2 * bx * (q0q2 + q1q3) + bz * (1 - 2 * q1q1 - 2 * q2q2)
+
+            ex = ay * vz - az * vy + my * nz - mz * ny
+            ey = az * vx - ax * vz + mz * nx - mx * nz
+            ez = ax * vy - ay * vx + mx * ny - my * nx
         else:
             ex = ay * vz - az * vy
             ey = az * vx - ax * vz
@@ -142,7 +157,7 @@ class MahonyPredictor:
         self.q[1] += (qTemp[0] * w[0] + qTemp[2] * w[2] - qTemp[3] * w[1]) * 0.5 * self.dt
         self.q[2] += (qTemp[0] * w[1] - qTemp[1] * w[2] + qTemp[3] * w[0]) * 0.5 * self.dt
         self.q[3] += (qTemp[0] * w[2] + qTemp[1] * w[1] - qTemp[2] * w[0]) * 0.5 * self.dt
-        qNorm = math.sqrt(self.q[0] * self.q[0] + self.q[1] * self.q[1] + self.q[2] * self.q[2] + self.q[3] * self.q[3])
+        qNorm = math.sqrt(q0q0 + q1q1 + q2q2 + q3q3)
         self.q = [qi / qNorm for qi in self.q]
 
         # 6、四元数转欧拉角
@@ -155,9 +170,9 @@ class MahonyPredictor:
             self.roll = sign * math.pi * 0.5
             self.pitch = 0
         else:
-            self.pitch = math.atan2(2 * self.q[0] * self.q[1] + 2 * self.q[2] * self.q[3], 1 - 2 * self.q[1] * self.q[1] - 2 * self.q[2] * self.q[2])
-            self.roll = math.asin(2 * self.q[0] * self.q[2] - 2 * self.q[3] * self.q[1])
-            self.yaw = math.atan2(2 * self.q[0] * self.q[3] + 2 * self.q[1] * self.q[2], 1 - 2 * self.q[2] * self.q[2] - 2 * self.q[3] * self.q[3])
+            self.pitch = math.atan2(2 * q0q1 + 2 * q2q3, 1 - 2 * q1q1 - 2 * q2q2)
+            self.roll = math.asin(2 * q0q2 - 2 * q1q3)
+            self.yaw = math.atan2(2 * q0q3 + 2 * q1q2, 1 - 2 * q2q2 - 2 * q3q3)
 
 def main():
     snesorDict = {'imu': 'LSM6DS3TR-C', 'magSensor': 'AK09970d'}
