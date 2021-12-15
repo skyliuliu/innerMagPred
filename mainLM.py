@@ -99,7 +99,7 @@ def h0(state):
     Bs[-1] *= -1
 
     # 加速度计的读数
-    a_s = emz * g0
+    a_s = emz
 
     return np.concatenate((a_s, Bs.reshape(-1)))
 
@@ -116,7 +116,7 @@ def derive(state, param_index):
     if param_index < 3:
         delta = 0.0001
     else:
-        delta = 0.001
+        delta = 0.0001
     state1[param_index] += delta
     state2[param_index] -= delta
     data_est_output1 = h0(state1)
@@ -182,8 +182,8 @@ def LM(state2, output_data, n, maxIter, printBool):
     J = jacobian(state, m)
     A = J.T.dot(J)
     g = J.T.dot(res)
-    u = get_init_u(A, tao)  # set the init u
-    # u = 100
+    # u = get_init_u(A, tao)  # set the init u
+    u = 100
     v = 2
     rou = 0
     mse = 0
@@ -217,7 +217,10 @@ def LM(state2, output_data, n, maxIter, printBool):
                 residual_memory.append(mse)
                 if stop:
                     # state2[:] = state
-                    stateOut(state, state2, t0, i, mse, 'threshold_stop or threshold_residual', printBool)
+                    if np.linalg.norm(g, ord=np.inf) <= eps_stop:
+                        stateOut(state, state2, t0, i, mse, 'threshold_stop', printBool)
+                    if mse <= eps_residual:
+                        stateOut(state, state2, t0, i, mse, 'cost stop', printBool)
                     return
                 else:
                     break
@@ -265,13 +268,13 @@ def generate_data(num_data, state, sensor_std, printBool):
     mid = h0(state)  # 模拟B值数据的中间值
     sim = np.zeros(num_data)
     for j in range(num_data - 3):
-        sim[j] = np.random.normal(mid[j], 0.01, 1)
+        sim[j] = np.random.normal(mid[j], sensor_std, 1)
     for k in range(num_data - 3, num_data):
         sim[k] = np.random.normal(mid[k], sensor_std, 1)
 
     if printBool:
-        print('sensor_mid={}'.format(np.round(mid[:6], 0)))
-        print('sensor_sim={}'.format(np.round(sim[:6], 0)))
+        print('sensor_mid={}'.format(np.round(mid[:6], 3)))
+        print('sensor_sim={}'.format(np.round(sim[:6], 3)))
     return sim
 
 
@@ -311,7 +314,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
         posTruth, emTruth = states[0][:3], q2R(states[0][3: 7])[:, -1]
         err_pos = np.linalg.norm(poss[-1] - posTruth) / np.linalg.norm(posTruth)
         err_em = np.linalg.norm(q2R(ems[-1])[:, -1] - emTruth)  # 方向矢量本身是归一化的
-        print('pos={}: err_pos={:.0%}, err_em={:.0%}'.format(np.round(posTruth, 3), err_pos, err_em))
+        print('pos={}， emz={}: err_pos={:.0%}, err_em={:.0%}'.format(np.round(posTruth, 3), np.round(emTruth, 3), err_pos, err_em))
         residual_memory.clear()
         us.clear()
         poss.clear()
@@ -379,7 +382,7 @@ if __name__ == '__main__':
     # 仿真模拟
     # states = [np.array([0.2, -0.1, 0.2, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
     states = [np.array([0, 0.2, 0.1, 1, 2, 3, 0])]  # 真实值
-    err = sim(states, state0, sensor_std=0.1, plotBool=False, plotType=(1, 2), printBool=True)
+    err = sim(states, state0, sensor_std=0, plotBool=False, plotType=(1, 2), printBool=True)
     # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
 
     # 实际运行
