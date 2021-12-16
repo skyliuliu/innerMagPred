@@ -23,6 +23,8 @@
 | readData.py        | 读取串口数据，并进行绘图                    |
 | allanFit.py        | 计算真实数据的allan方差，并进行拟合          |
 | mainPSO.py         | 使用PSO算法实现的胶囊定位方法                |
+| Lie.py             | 李代数的定义类                             |
+| se3LM.py           | 基于李代数的LM优化算法                      |
 
 
 ## 5. 软件安装

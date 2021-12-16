@@ -182,8 +182,8 @@ def LM(state2, output_data, n, maxIter, printBool):
     J = jacobian(state, m)
     A = J.T.dot(J)
     g = J.T.dot(res)
-    # u = get_init_u(A, tao)  # set the init u
-    u = 100
+    u = get_init_u(A, tao)  # set the init u
+    # u = 100
     v = 2
     rou = 0
     mse = 0
@@ -377,12 +377,12 @@ def runReadData(printBool, maxIter=50):
 
 
 if __name__ == '__main__':
-    state0 = np.array([0, 0, 0.01, 0, 1, 1, 0, MOMENT, 0, 0])  # 初始值
+    state0 = np.array([0, 0, 0.01, 1, 0, 0, 0, MOMENT, 0, 0])  # 初始值
 
     # 仿真模拟
     # states = [np.array([0.2, -0.1, 0.2, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    states = [np.array([0, 0.2, 0.1, 1, 2, 3, 0])]  # 真实值
-    err = sim(states, state0, sensor_std=0, plotBool=False, plotType=(1, 2), printBool=True)
+    states = [np.array([0, 0.1, 0.1, 1, 0, 0, 0])]  # 真实值
+    err = sim(states, state0, sensor_std=0.01, plotBool=False, plotType=(1, 2), printBool=True)
     # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
 
     # 实际运行
