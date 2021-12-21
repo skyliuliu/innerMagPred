@@ -7,6 +7,7 @@ DateTime: 2021/12/16 14:31
 desc: 基于李代数LM非线性优化，实现内置式磁定位
 '''
 import datetime
+import math
 
 from Lie import *
 
@@ -16,6 +17,17 @@ class Predictor:
     EPM_POS = np.array([[0, 0, 0.5]]).T  # 外部大磁体的坐标[m]
     MOMENT = 2169  # 外部大磁体的磁矩[A*m^2]
 
+    COIL_POS = np.array([[0, 0.2, -0.2]]).T  # 下线圈的中心位置[m]
+    COIL_INNER_R = 0.16 / 2   # 下线圈的内半径[m]
+    COIL_TURNS = 510   # 下线圈的匝数
+    COIL_LAYERS = 20   # 下线圈的层数
+    COIL_OUTTER_R = 0.227 / 2   # 下线圈的外半径[m]
+    COIL_CURRENT = 5   # 下线圈的电流
+    COIL_d = (COIL_OUTTER_R - COIL_INNER_R) / (COIL_TURNS / COIL_LAYERS - 1)   # 线圈导线的径向间距[m]
+    COIL_NR = COIL_TURNS // COIL_LAYERS   # 径向圈数
+    COIL_AREA = 0
+    #COIL_AREA = COIL_TURNS // COIL_LAYERS * math.pi * sum([(COIL_INNER_R + COIL_d * k) ** 2 for k in range(COIL_LAYERS)]) / 1000000
+
     def __init__(self, state, stateX):
         '''
         初始化定位类
@@ -24,34 +36,49 @@ class Predictor:
         '''
         self.state = state
         self.stateX = stateX
-        self.m = 6
+        self.m = 9
         self.n = 6
+
+        for i in range(self.COIL_LAYERS):
+            self.COIL_AREA += self.COIL_NR * math.pi * (self.COIL_INNER_R + self.COIL_d * i) ** 2
+        self.coil_moment = self.COIL_AREA * self.COIL_CURRENT
 
     def h(self, state):
         '''
         观测函数
         :return: 【np.array】观测值
         '''
-        EPMNorm = np.linalg.norm(self.EPM_ORI)
-        eEPM = self.EPM_ORI / EPMNorm
-
         pos = state.exp().matrix()[:3, 3]
         R = state.exp().matrix()[:3, :3]
+
+        # 外部大磁体
+        EPMNorm = np.linalg.norm(self.EPM_ORI)
+        eEPM = self.EPM_ORI / EPMNorm
 
         r = pos.reshape(3, 1) + self.EPM_POS
         rNorm = np.linalg.norm(r)
         er = r / rNorm
 
+        # 下线圈
+        eCOIL = np.array([[0, 0, 1]]).T
+        rCOIL = pos.reshape(3, 1) + self.COIL_POS
+        rCOILNorm = np.linalg.norm(rCOIL)
+        erCOIL = rCOIL / rCOILNorm
+
         # EPM坐标系下sensor的B值[Gs]
-        B = self.MOMENT * np.dot(rNorm ** (-3), np.subtract(3 * np.dot(np.inner(er, eEPM), er), eEPM)) / 1000
+        B0 = self.MOMENT * np.dot(rNorm ** (-3), np.subtract(3 * np.dot(np.inner(er, eEPM), er), eEPM)) / 1000
+        Bi = self.coil_moment * np.dot(rCOILNorm ** (-3), np.subtract(3 * np.dot(np.inner(erCOIL, eCOIL), erCOIL), eCOIL)) / 1000
         # 变换到胶囊坐标系下的sensor读数
-        Bs = np.dot(R, B)
-        Bs[-1] *= -1
+        B0s = np.dot(R, B0)
+        B0s[-1] *= -1
+
+        Bis = np.dot(R, Bi)
+        Bis[-1] *= -1
 
         # 加速度计的读数
         a_s = R[2]  # 重力矢量在胶囊坐标系下的坐标
 
-        return np.concatenate((a_s, Bs.reshape(-1)))
+        return np.concatenate((a_s, B0s.reshape(-1), Bis.reshape(-1)))
 
     def generateData(self, std):
         '''
@@ -67,6 +94,8 @@ class Predictor:
         for j in range(self.m):
             simData[j] = np.random.normal(midData[j], std, 1)
         self.measureData = simData
+        print('sensor_mid={}'.format(np.round(midData[:], 3)))
+        print('sensor_sim={}'.format(np.round(simData[:], 3)))
 
     def residual(self, state):
         '''
@@ -105,12 +134,12 @@ class Predictor:
     def get_init_u(self, A, tao):
         """
         确定u的初始值
-        :param A: 【np.array】 J.T * J (m, m)
+        :param A: 【np.array】 J.T * J (n, n)
         :param tao: 【float】常量
         :return: 【int】u
         """
         Aii = []
-        for i in range(0, self.m):
+        for i in range(0, self.n):
             Aii.append(A[i, i])
         u = tao * max(Aii)
         return u
@@ -173,7 +202,6 @@ class Predictor:
                     u *= v
                     v *= 2
 
-
             self.stateOut(t0, i, mse, '', printBool)
 
     def stateOut(self, t0, i, mse, printStr, printBool):
@@ -212,7 +240,7 @@ class Predictor:
 
 if __name__ == '__main__':
     state = se3(vector=np.array([0, 0, 0, 0, 0, 0.01]))
-    stateX = se3(vector=np.array([0, 0, 0, 0, 0.1, 0.1]))
+    stateX = se3(vector=np.array([1.04722, 0, 0, 0.2, 0.014, 0.2337]))
 
     pred = Predictor(state, stateX)
     pred.sim()

@@ -33,9 +33,19 @@ MOMENT = 2169
 g0 = 9.8
 DISTANCE = 0.0138
 SENSORLOC = np.array([[0, 0, DISTANCE]]).T
-EPM_ORI = np.array([[1, 0, 0]]).T    # 外部大磁体的N极朝向
+EPM_ORI = np.array([[0, 1, 0]]).T    # 外部大磁体的N极朝向
 EPM_POS = np.array([[0, 0, 0.5]]).T  # 外部大磁体的坐标
 
+COIL_POS = np.array([[0, 0.2, -0.2]]).T  # 下线圈的中心位置[m]
+COIL_INNER_R = 0.16 / 2   # 下线圈的内半径[m]
+COIL_TURNS = 510   # 下线圈的匝数
+COIL_LAYERS = 20   # 下线圈的层数
+COIL_OUTTER_R = 0.227 / 2   # 下线圈的外半径[m]
+COIL_CURRENT = 5   # 下线圈的电流
+COIL_d = (COIL_OUTTER_R - COIL_INNER_R) / (COIL_TURNS / COIL_LAYERS - 1)   # 线圈导线的径向间距[m]
+COIL_NR = COIL_TURNS // COIL_LAYERS
+COIL_AREA = COIL_NR * math.pi * sum([(COIL_INNER_R + COIL_d * k) ** 2 for k in range(COIL_LAYERS)])
+COIL_MOMENT = COIL_AREA * COIL_CURRENT
 
 def h(state):
     '''
@@ -80,28 +90,39 @@ def h0(state):
     :param EPM: 外部大磁体的朝向
     :return: 胶囊内imu+磁传感器的读数
     '''
-    EPMNorm = np.linalg.norm(EPM_ORI)
-    eEPM = EPM_ORI / EPMNorm
-
     pos, q = state[0: 3], state[3: 7]
     q /= np.linalg.norm(q)
     R = q2R(q)
     emz = R[:, -1]  # 重力矢量在胶囊坐标系下的坐标
 
+    # 外部大磁体
+    EPMNorm = np.linalg.norm(EPM_ORI)
+    eEPM = EPM_ORI / EPMNorm
     r = pos.reshape(3, 1) + EPM_POS
     rNorm = np.linalg.norm(r)
     er = r / rNorm
 
+     # 下线圈
+    eCOIL = np.array([[0, 0, 1]]).T
+    rCOIL = pos.reshape(3, 1) + COIL_POS
+    rCOILNorm = np.linalg.norm(rCOIL)
+    erCOIL = rCOIL / rCOILNorm
+
     # EPM坐标系下sensor的B值[Gs]
-    B = MOMENT * np.dot(rNorm ** (-3), np.subtract(3 * np.dot(np.inner(er, eEPM), er), eEPM)) / 1000
+    B0 = MOMENT * np.dot(rNorm ** (-3), np.subtract(3 * np.dot(np.inner(er, eEPM), er), eEPM)) / 1000
+    Bi = COIL_MOMENT * np.dot(rCOILNorm ** (-3), np.subtract(3 * np.dot(np.inner(erCOIL, eCOIL), erCOIL), eCOIL)) / 1000
+
     # 变换到胶囊坐标系下的sensor读数
-    Bs = np.dot(R, B)
-    Bs[-1] *= -1
+    B0s = np.dot(R, B0)
+    B0s[-1] *= -1
+
+    Bis = np.dot(R, Bi)
+    Bis[-1] *= -1
 
     # 加速度计的读数
     a_s = emz
 
-    return np.concatenate((a_s, Bs.reshape(-1)))
+    return np.concatenate((a_s, B0s.reshape(-1), Bis.reshape(-1)))
 
 
 def derive(state, param_index):
@@ -153,7 +174,7 @@ def residual(state, output_data):
 def get_init_u(A, tao):
     """
     确定u的初始值
-    :param A: 【np.array】 J.T * J (m, m)
+    :param A: 【np.array】 J.T * J (n, n)
     :param tao: 【float】常量
     :return: 【int】u
     """
@@ -260,21 +281,19 @@ def generate_data(num_data, state, sensor_std, printBool):
     """
     生成模拟数据
     :param num_data: 【int】观测数据的维度
-    :param state: 【np.array】模拟的胶囊状态 (m,)
+    :param state: 【np.array】模拟的胶囊状态 (n,)
     :param sensor_std：【float】磁传感器的噪声标准差 [mG]
     :param printBool: 【bool】是否打印输出
     :return: 【np.array】模拟的B值 + 加速度计的数值, (num_data, )
     """
     mid = h0(state)  # 模拟B值数据的中间值
     sim = np.zeros(num_data)
-    for j in range(num_data - 3):
+    for j in range(num_data):
         sim[j] = np.random.normal(mid[j], sensor_std, 1)
-    for k in range(num_data - 3, num_data):
-        sim[k] = np.random.normal(mid[k], sensor_std, 1)
 
     if printBool:
-        print('sensor_mid={}'.format(np.round(mid[:6], 3)))
-        print('sensor_sim={}'.format(np.round(sim[:6], 3)))
+        print('sensor_mid={}'.format(np.round(mid[:], 3)))
+        print('sensor_sim={}'.format(np.round(sim[:], 3)))
     return sim
 
 
@@ -290,7 +309,7 @@ def sim(states, state0, sensor_std, plotType, plotBool, printBool, maxIter=100):
     :param maxIter: 【int】最大迭代次数
     :return: 【tuple】 位置[x, y, z]和姿态ez的误差百分比
     '''
-    m, n = 6, 7
+    m, n = 9, 7
     for i in range(1):
         # run
         output_data = generate_data(m, states[i], sensor_std, printBool)
@@ -381,7 +400,7 @@ if __name__ == '__main__':
 
     # 仿真模拟
     # states = [np.array([0.2, -0.1, 0.2, 0.5 * math.sqrt(3), 0.5, 0, 0])]    # 真实值
-    states = [np.array([0, 0.1, 0.1, 1, 0, 0, 0])]  # 真实值
+    states = [np.array([0, 0.1, 0.2, 1, 2, 3, 0])]  # 真实值
     err = sim(states, state0, sensor_std=0.01, plotBool=False, plotType=(1, 2), printBool=True)
     # simErrDistributed(contourBar=9, sensor_std=10, pos_or_ori=0)
 

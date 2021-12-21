@@ -29,5 +29,6 @@
 
 ## 5. 软件安装
 + python > 3.8.3
++ pip工具升级到最新版本：`python3 -m pip install --upgrade pip`
 + 依赖包的版本要求如requirements.txt所示
 + 依赖包安装方法：`pip install -r requirements.txt`
